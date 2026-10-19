@@ -229,6 +229,11 @@ def connect(
 
     try:
         yield client
+    except LoginRequired as exc:
+        raise AuthError(
+            f"The session for @{username} is no longer valid — Instagram logged it out. "
+            f"Run `seraig auth login --account {username}` to sign in again."
+        ) from exc
     finally:
         try:
             manager.save(client, username)

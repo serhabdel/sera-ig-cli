@@ -178,3 +178,32 @@ def test_connect_can_still_validate(monkeypatch, config) -> None:
         with client_module.connect("noor", manager=manager, validate=True):
             pass
     assert "expired" in str(excinfo.value)
+
+
+def test_a_logged_out_session_names_the_account(monkeypatch, config) -> None:
+    """When Instagram logs the session out, say which account and what to do."""
+    from instagrapi.exceptions import LoginRequired
+
+    from sera_ig import client as client_module
+
+    manager = SessionManager(config)
+    manager.write_settings("noor", {"uuids": {}, "cookies": {}})
+
+    class LoggedOutClient:
+        username = "noor"
+        user_id = 1
+
+        def get_settings(self) -> dict:
+            return {"uuids": {}}
+
+        def set_settings(self, settings: dict) -> bool:
+            return True
+
+    monkeypatch.setattr(manager, "build_client", lambda username=None: LoggedOutClient())
+
+    with pytest.raises(AuthError) as excinfo:
+        with client_module.connect("noor", manager=manager):
+            raise LoginRequired("logged out")
+    message = str(excinfo.value)
+    assert "@noor" in message
+    assert "seraig auth login" in message
