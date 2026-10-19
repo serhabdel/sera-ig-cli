@@ -84,6 +84,7 @@ def inbox(
             amount=limit,
             selected_filter=thread_filter,
             search=search,
+            message_limit=1,
         )
     emit(fmt, records, lambda: _render_inbox(records))
 

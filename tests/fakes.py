@@ -210,8 +210,18 @@ class FakeClient:
         )
 
     # --------------------------------------------------------------- direct
-    def direct_threads(self, amount: int = 20, selected_filter: Any = None) -> list[DirectThread]:
-        return list(self.threads[:amount])
+    def direct_threads(
+        self,
+        amount: int = 20,
+        selected_filter: Any = None,
+        box: Any = None,
+        thread_message_limit: int | None = None,
+    ) -> list[DirectThread]:
+        threads = list(self.threads[:amount])
+        if thread_message_limit is not None:
+            for thread in threads:
+                thread.messages = thread.messages[-thread_message_limit:]
+        return threads
 
     def direct_thread(self, thread_id: int, amount: int = 20) -> DirectThread:
         for thread in self.threads:

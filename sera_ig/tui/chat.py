@@ -102,7 +102,9 @@ class ChatTUI:
         self._threads_bg.start(self._fetch_threads)
 
     def _fetch_threads(self) -> list[dict[str, Any]]:
-        return api.list_threads(self.client, amount=50, search=self.search or None)
+        # One page is enough for the list, and a single message per thread
+        # keeps the payload light — the pane only shows the preview.
+        return api.list_threads(self.client, amount=20, search=self.search or None, message_limit=1)
 
     def _collect_threads(self) -> None:
         """Apply whatever the conversation-list job produced."""

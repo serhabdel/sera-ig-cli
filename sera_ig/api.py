@@ -35,11 +35,19 @@ def list_threads(
     amount: int = 20,
     selected_filter: str | None = None,
     search: str | None = None,
+    message_limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Return the DM inbox as a list of normalised thread dicts."""
+    """Return the DM inbox as a list of normalised thread dicts.
+
+    Instagram's inbox endpoint paginates, and every page is another round
+    trip, so *amount* decides how many requests this makes. *message_limit*
+    caps how many messages come back with each thread — the inbox only needs
+    the last one, and the full history makes the payload much heavier.
+    """
     threads = client.direct_threads(
         amount=amount,
         selected_filter=selected_filter if selected_filter in (None, "", "all") else selected_filter,
+        thread_message_limit=message_limit,
     )
     records = []
     for thread in threads:

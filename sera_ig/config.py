@@ -43,7 +43,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "advanced": {
         "data_dir": None,  # filled in below
-        "request_timeout": 30,
+        "request_delay": 1,
         "debug": False,
     },
 }

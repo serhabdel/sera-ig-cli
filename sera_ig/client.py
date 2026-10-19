@@ -157,10 +157,16 @@ class SessionManager:
 
     # -------------------------------------------------------------- clients
     def build_client(self, username: str | None = None) -> SeraClient:
-        """Create a client with sane defaults, without touching the network."""
-        timeout = self.config.get("advanced.request_timeout", 30) or 30
+        """Create a client with sane defaults, without touching the network.
+
+        ``request_timeout`` is instagrapi's name for the pause it takes
+        between requests — it is an anti-detection delay, not an HTTP
+        timeout. It defaults to one second there, and a larger value makes
+        every single call that much slower.
+        """
+        delay = self.config.get("advanced.request_delay", 1)
         client = SeraClient(
-            request_timeout=timeout,
+            request_timeout=delay,
             delay_range=self.config.get("advanced.delay_range") or None,
         )
         if username:
@@ -176,6 +182,9 @@ class SessionManager:
         except Exception as exc:  # pragma: no cover - defensive
             raise AuthError(f"Could not restore the session for @{username}: {exc}") from exc
         client.username = username
+        # A session stored by an older version carries its own delay, and
+        # restoring it would override the configured one.
+        client.request_timeout = self.config.get("advanced.request_delay", 1)
         return client
 
     def save(self, client: SeraClient, username: str) -> None:

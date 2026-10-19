@@ -276,11 +276,21 @@ Everything lives in `~/.sera-ig-cli/`:
 ├── config.yaml              # your settings
 ├── users/<username>/
 │   └── session.json         # the instagrapi session (mode 0600)
+├── history                  # shell command history
 ├── logs/                    # debug logs
 └── downloads/               # default download target
 ```
 
 Set `SERA_IG_HOME` to move the whole thing somewhere else.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `login.current_username` | – | The account to use |
+| `login.totp_secret` | – | Authenticator seed, so 2FA needs no input |
+| `chat.page_size` | 20 | Messages fetched per thread |
+| `output.format` | `text` | `text` or `json` |
+| `advanced.request_delay` | 1 | Seconds to wait between requests (instagrapi's anti-detection pause — **0 is fastest**) |
+| `advanced.debug` | `false` | Write debug logs to `logs/` |
 
 ## JSON output — built for agents
 

@@ -95,6 +95,26 @@ def test_fake_client_satisfies_the_session_interface() -> None:
     assert isinstance(json.dumps(client.get_settings()), str)
 
 
+def test_request_delay_comes_from_the_config(config) -> None:
+    """instagrapi's request_timeout is a pause between requests, not a timeout."""
+    manager = SessionManager(config)
+    config.set("advanced.request_delay", 1)
+    assert manager.build_client().request_timeout == 1
+
+    config.set("advanced.request_delay", 0)
+    assert manager.build_client().request_timeout == 0
+
+
+def test_a_stored_session_cannot_override_the_request_delay(config) -> None:
+    """A session saved by an older version must not restore a stale delay."""
+    manager = SessionManager(config)
+    manager.write_settings("noor", {"uuids": {}, "request_timeout": 30})
+    config.set("advanced.request_delay", 1)
+
+    client = manager.restore("noor")
+    assert client.request_timeout == 1
+
+
 def test_connect_does_not_block_on_a_network_call(monkeypatch, config) -> None:
     """Restoring a session must not make a request.
 
