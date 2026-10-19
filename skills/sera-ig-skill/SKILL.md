@@ -170,6 +170,15 @@ seraig auth switch sara         # change the default
 seraig inbox --account sara     # use one account for a single run
 ```
 
+## The interactive shell
+
+`seraig` with no arguments opens a prompt where commands are typed without
+the program name (`inbox`, `read noor`, …). It is the same command surface
+as the command line, with the same `-o json` output.
+
+**Do not use the shell from an agent.** It needs a terminal, it waits for
+input, and it never terminates on its own. Use the one-turn commands.
+
 ---
 
 ## Recommended workflow
@@ -205,5 +214,6 @@ suggests close matches — offer those to the user rather than guessing.
 - Do not build loops, bulk messaging or scraping on top of these commands —
   that is bot behaviour, it breaks accounts, and it is out of scope for this
   project.
-- Do not use the TUI (`seraig tui chat`) — it needs a terminal and never
-  terminates on its own. Use the one-turn commands.
+- Do not use the interactive shell (`seraig` with no arguments) or the TUI
+  (`seraig tui chat`) — they need a terminal and never terminate on their
+  own. Use the one-turn commands.

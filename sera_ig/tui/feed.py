@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import curses
+import time
 from typing import Any
 
 from .. import api
-from ..errors import SeraError
 from ..output import format_time
-from .widgets import Pane, ScrollState, attr, init_colors, safe_addstr, truncate
+from .tasks import Background
+from .widgets import Pane, ScrollState, Spinner, attr, init_colors, safe_addstr, truncate
+
+REFRESH_SECONDS = 30
 
 
 class FeedTUI:
@@ -21,6 +24,15 @@ class FeedTUI:
         self.scroll = ScrollState()
         self.status = ""
         self._running = True
+        self._screen_size = (24, 80)
+        self._last_refresh = 0.0
+        self._background = Background()
+        self._spinner = Spinner("Loading feed")
+
+    @property
+    def _busy(self) -> bool:
+        """Whether the feed is still loading."""
+        return self._background.busy
 
     def run(self) -> None:
         """Start the TUI."""
@@ -29,16 +41,25 @@ class FeedTUI:
     def _main(self, screen: curses.window) -> None:
         init_colors()
         screen.keypad(True)
-        curses.curs_set(0)
-        screen.timeout(1000)
+        try:
+            curses.curs_set(0)
+        except curses.error:  # pragma: no cover - terminal dependent
+            pass
+        screen.timeout(250)
+        self._last_refresh = time.time()
         self._load()
+
         while self._running:
             self._draw(screen)
+            self._collect()
             try:
                 key = screen.getch()
             except KeyboardInterrupt:  # pragma: no cover - defensive
                 break
             if key == -1:
+                if time.time() - self._last_refresh > REFRESH_SECONDS and not self._busy:
+                    self._last_refresh = time.time()
+                    self._load()
                 continue
             if key in (3, 4):  # ctrl-c / ctrl-d
                 break
@@ -46,9 +67,9 @@ class FeedTUI:
                 self.selected = max(0, self.selected - 1)
             elif key in (curses.KEY_DOWN, ord("j")):
                 self.selected = min(max(0, len(self.items) - 1), self.selected + 1)
-            elif key in (curses.KEY_PPAGE,):
+            elif key == curses.KEY_PPAGE:
                 self.selected = max(0, self.selected - 10)
-            elif key in (curses.KEY_NPAGE,):
+            elif key == curses.KEY_NPAGE:
                 self.selected = min(max(0, len(self.items) - 1), self.selected + 10)
             elif key == ord("r"):
                 self._load()
@@ -58,14 +79,28 @@ class FeedTUI:
                 continue
 
     def _load(self) -> None:
-        try:
-            self.items = api.timeline(self.client, amount=40)
-        except SeraError as exc:
-            self.status = f"error: {exc}"
-            self.items = []
+        """Fetch the timeline in the background."""
+        self._background.start(self._fetch)
+
+    def _fetch(self) -> list[dict[str, Any]]:
+        return api.timeline(self.client, amount=40)
+
+    def _collect(self) -> None:
+        """Apply whatever the background job produced."""
+        finished = self._background.take()
+        if finished is None:
+            return
+        result, error = finished
+        if error is not None:
+            self.status = str(error)
+            return
+        self.items = result or []
+        if self.selected >= len(self.items):
+            self.selected = max(0, len(self.items) - 1)
 
     def _draw(self, screen: curses.window) -> None:
-        height, width = screen.getmaxyx()
+        self._screen_size = screen.getmaxyx()
+        height, width = self._screen_size
         screen.erase()
 
         list_width = max(30, min(46, width // 2))
@@ -74,29 +109,10 @@ class FeedTUI:
         list_pane.draw_border(attr(4))
         detail_pane.draw_border(attr(4))
 
-        visible = list_pane.inner_height
-        self.scroll.total = len(self.items)
-        self.scroll.clamp(visible)
-        for row in range(visible):
-            index = self.scroll.offset + row
-            if index >= len(self.items):
-                break
-            item = self.items[index]
-            user = item.get("user") or {}
-            label = truncate(f"@{user.get('username', '')}", list_pane.inner_width - 2)
-            if index == self.selected:
-                safe_addstr(list_pane.window, list_pane.y + 1 + row, list_pane.x + 1, label, attr(6))
-            else:
-                safe_addstr(list_pane.window, list_pane.y + 1 + row, list_pane.x + 1, label)
-            caption = truncate(item.get("caption", ""), list_pane.inner_width - 2)
-            if row + 2 < visible:
-                safe_addstr(
-                    list_pane.window,
-                    list_pane.y + 2 + row,
-                    list_pane.x + 1,
-                    caption,
-                    curses.A_DIM,
-                )
+        if self._busy and not self.items:
+            safe_addstr(list_pane.window, list_pane.y + 1, list_pane.x + 1, self._spinner.advance(), attr(3))
+        else:
+            self._draw_list(list_pane)
 
         self._draw_detail(detail_pane)
         safe_addstr(
@@ -107,6 +123,34 @@ class FeedTUI:
             attr(5) if self.status else curses.A_DIM,
         )
         screen.refresh()
+
+    def _draw_list(self, pane: Pane) -> None:
+        if not self.items:
+            safe_addstr(pane.window, pane.y + 1, pane.x + 1, "Nothing to show.", curses.A_DIM)
+            return
+        visible = pane.inner_height
+        self.scroll.total = len(self.items)
+        self.scroll.clamp(visible)
+        for row in range(visible):
+            index = self.scroll.offset + row
+            if index >= len(self.items):
+                break
+            item = self.items[index]
+            user = item.get("user") or {}
+            label = truncate(f"@{user.get('username', '')}", pane.inner_width - 2)
+            if index == self.selected:
+                safe_addstr(pane.window, pane.y + 1 + row, pane.x + 1, label, attr(6))
+            else:
+                safe_addstr(pane.window, pane.y + 1 + row, pane.x + 1, label)
+            caption = truncate(item.get("caption", ""), pane.inner_width - 2)
+            if row + 2 < visible:
+                safe_addstr(
+                    pane.window,
+                    pane.y + 2 + row,
+                    pane.x + 1,
+                    caption,
+                    curses.A_DIM,
+                )
 
     def _draw_detail(self, pane: Pane) -> None:
         if not self.items:
@@ -148,3 +192,6 @@ def _wrap(text: str, width: int) -> list[str]:
 def run(client: Any) -> None:
     """Entry point used by the CLI."""
     FeedTUI(client).run()
+
+
+__all__ = ["FeedTUI", "run"]

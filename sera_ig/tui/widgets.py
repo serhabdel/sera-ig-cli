@@ -1,9 +1,13 @@
-"""Curses helpers shared by the TUIs."""
+"""Shared curses helpers."""
 
 from __future__ import annotations
 
 import curses
+import itertools
 from dataclasses import dataclass
+
+SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+SPINNER_FRAMES_ASCII = "|/-\\"
 
 
 def safe_addstr(window: curses.window, y: int, x: int, text: str, attr: int = 0) -> None:
@@ -35,6 +39,35 @@ def truncate(text: str, width: int) -> str:
     if width == 1:
         return "…"
     return text[: width - 1] + "…"
+
+
+def spinner_frames() -> tuple[str, ...]:
+    """Return the spinner frames the terminal can display."""
+    encoding = "utf-8"
+    try:
+        "⠋".encode(encoding)
+    except UnicodeEncodeError:  # pragma: no cover - legacy console
+        return tuple(SPINNER_FRAMES_ASCII)
+    return tuple(SPINNER_FRAMES)
+
+
+class Spinner:
+    """An animated spinner that advances on every frame."""
+
+    def __init__(self, label: str = "Loading") -> None:
+        self.label = label
+        self._frames = itertools.cycle(spinner_frames())
+        self._frame = next(self._frames)
+
+    def advance(self) -> str:
+        """Move to the next frame and return the whole line."""
+        self._frame = next(self._frames)
+        return f"{self._frame} {self.label}…"
+
+    @property
+    def frame(self) -> str:
+        """The current frame character."""
+        return self._frame
 
 
 @dataclass
@@ -101,8 +134,11 @@ def init_colors() -> None:
     """Initialise the colour pairs used by the TUIs."""
     if not curses.has_colors():
         return
-    curses.start_color()
-    curses.use_default_colors()
+    try:
+        curses.start_color()
+        curses.use_default_colors()
+    except curses.error:  # pragma: no cover - limited terminals
+        return
     pairs = {
         1: (curses.COLOR_CYAN, -1),  # accents
         2: (curses.COLOR_GREEN, -1),  # success / own messages

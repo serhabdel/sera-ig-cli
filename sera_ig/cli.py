@@ -59,7 +59,7 @@ def print_banner() -> None:
     console.print(f"[magenta]{logo}[/magenta]")
     console.print("[green]The end of brainrot and doomscrolling is here.[/green]")
     console.print()
-    console.print("Type [cyan]seraig --help[/cyan] to see the available commands.")
+    console.print("Type [cyan]help[/cyan] for the commands, [cyan]exit[/cyan] to leave the shell.")
     console.print(
         "[dim]Pro tip: use the --output json flag for scripting and AI agents.[/dim]"
     )
@@ -78,6 +78,9 @@ def root(
     version: bool = typer.Option(
         False, "--version", "-v", help="Show the version and exit", is_eager=True
     ),
+    shell: bool = typer.Option(
+        False, "--shell", "-s", help="Open the interactive shell", is_eager=True
+    ),
 ) -> None:
     """Instagram in your terminal."""
     if version:
@@ -94,9 +97,23 @@ def root(
 
     _setup_logging()
 
+    if shell:
+        _open_shell()
+        raise typer.Exit()
+
     if ctx.invoked_subcommand is not None:
         return
+
+    # No subcommand: greet and drop into the interactive shell.
     print_banner()
+    _open_shell()
+
+
+def _open_shell() -> None:
+    """Start the interactive shell."""
+    from .shell import run as run_shell
+
+    run_shell()
 
 
 def _setup_logging() -> None:
@@ -289,6 +306,16 @@ def version_command() -> None:
     console.print(f"sera-ig-cli {__version__}")
 
 
+@app.command("shell", help="Open the interactive shell.")
+def shell_command(
+    account: str = typer.Option(None, "--account", "-a", help="Account to use"),
+) -> None:
+    """Open the interactive shell."""
+    if account:
+        set_state(account=account.lstrip("@").strip())
+    _open_shell()
+
+
 # --------------------------------------------------------------------- doctor
 @app.command("doctor", help="Check the installation and the stored sessions.")
 def doctor() -> None:
@@ -309,6 +336,34 @@ def doctor() -> None:
 
 
 # ------------------------------------------------------------------ entrypoint
+def run_command_line(args: list[str]) -> int:
+    """Run one command programmatically and return its exit code.
+
+    This is what the interactive shell uses, so a command behaves exactly the
+    same whether it is typed at the prompt or on the command line.
+    """
+    from .click_compat import click_module
+
+    click = click_module()
+    command = typer.main.get_command(app)
+    try:
+        command.main(args=args, prog_name="seraig", standalone_mode=False)
+    except typer.Exit as exc:
+        return int(getattr(exc, "exit_code", 0) or 0)
+    except typer.Abort:
+        console.print("\n[dim]Interrupted.[/dim]")
+        return 130
+    except click.ClickException as exc:
+        exc.show()
+        return int(getattr(exc, "exit_code", 1) or 1)
+    except SeraError as exc:
+        fail(str(exc))
+        return exc.exit_code
+    except SystemExit as exc:  # pragma: no cover - defensive
+        return int(exc.code or 0)
+    return 0
+
+
 def main() -> None:
     """The ``seraig`` console script entry point."""
     try:

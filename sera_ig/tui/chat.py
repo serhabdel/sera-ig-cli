@@ -3,8 +3,11 @@
 Two panes: the conversation list on the left, the active conversation on the
 right, and an input line at the bottom. Everything is keyboard driven.
 
-    seraig chat                 open the TUI
-    seraig chat @noor          open straight into a conversation
+    seraig tui chat                 open the TUI
+    seraig tui chat abdel          open straight into a conversation
+
+Every call to Instagram happens on a worker thread, so the interface is
+drawn immediately and keeps animating while the network answers.
 """
 
 from __future__ import annotations
@@ -15,12 +18,12 @@ from typing import Any
 
 from .. import api
 from ..errors import SeraError
-from ..models import message_to_dict
 from ..output import format_time, relative_time
 from ..resolve import thread_title
-from .widgets import Pane, ScrollState, attr, init_colors, safe_addstr, truncate
+from .tasks import Background
+from .widgets import Pane, ScrollState, Spinner, attr, init_colors, safe_addstr, truncate
 
-REFRESH_SECONDS = 5
+REFRESH_SECONDS = 15
 MESSAGE_PAGE = 50
 
 
@@ -41,8 +44,20 @@ class ChatTUI:
         self.status = ""
         self.search = ""
         self.searching = False
-        self._last_refresh = 0.0
         self._running = True
+        self._screen_size = (24, 80)
+        self._last_refresh = 0.0
+        self._threads_bg = Background()
+        self._messages_bg = Background()
+        self._spinner = Spinner("Loading conversations")
+        self._spinner_line = self._spinner.advance()
+        self._loading_label = "Loading conversations"
+        self._keep_scroll = False
+
+    @property
+    def _busy(self) -> bool:
+        """Whether any network call is in flight."""
+        return self._threads_bg.busy or self._messages_bg.busy
 
     # ------------------------------------------------------------- lifecycle
     def run(self) -> None:
@@ -56,83 +71,107 @@ class ChatTUI:
             curses.curs_set(1)
         except curses.error:  # pragma: no cover - terminal dependent
             pass
-        screen.timeout(500)
-        self._load_threads()
+        screen.timeout(250)
+        self._last_refresh = time.time()
+
         if self.initial:
             self._open_initial()
-        elif self.threads:
-            self.selected = 0
-            self._open_selected()
-        self._last_refresh = time.time()
+        else:
+            self._start_load_threads()
 
         while self._running:
             self._draw(screen)
+            self._collect_threads()
+            self._collect_messages()
             try:
                 key = screen.getch()
             except KeyboardInterrupt:  # pragma: no cover - defensive
                 break
             if key == -1:
-                if time.time() - self._last_refresh > REFRESH_SECONDS:
-                    self._refresh()
+                if time.time() - self._last_refresh > REFRESH_SECONDS and not self._busy:
+                    self._last_refresh = time.time()
+                    self._start_load_threads()
                 continue
             self._handle_key(screen, key)
 
     # ----------------------------------------------------------------- data
-    def _load_threads(self) -> None:
-        try:
-            self.threads = api.list_threads(self.client, amount=50, search=self.search or None)
-        except SeraError as exc:
-            self.status = f"error: {exc}"
-            self.threads = []
+    def _start_load_threads(self) -> None:
+        """Fetch the conversation list in the background."""
+        self._loading_label = "Loading conversations"
+        self._spinner.label = self._loading_label
+        self._threads_bg.start(self._fetch_threads)
+
+    def _fetch_threads(self) -> list[dict[str, Any]]:
+        return api.list_threads(self.client, amount=50, search=self.search or None)
+
+    def _collect_threads(self) -> None:
+        """Apply whatever the conversation-list job produced."""
+        finished = self._threads_bg.take()
+        if finished is None:
             return
+        result, error = finished
+        if error is not None:
+            self.status = _describe(error)
+            return
+        self.threads = result or []
         if self.selected >= len(self.threads):
             self.selected = max(0, len(self.threads) - 1)
-
-    def _refresh(self) -> None:
-        self._last_refresh = time.time()
-        self._load_threads()
-        if self.current_thread is not None:
-            self._load_messages(keep_scroll=True)
+        if self.current_thread is None and self.threads:
+            self._open_thread(self.threads[self.selected])
 
     def _load_messages(self, keep_scroll: bool = False) -> None:
+        """Fetch the messages of the open thread in the background."""
         if self.current_thread is None:
             self.messages = []
             return
-        try:
-            self.messages = api.read_messages(
-                self.client, self.current_thread, limit=MESSAGE_PAGE
-            )
-        except SeraError as exc:
-            self.status = f"error: {exc}"
+        self._loading_label = "Loading messages"
+        self._spinner.label = self._loading_label
+        self._keep_scroll = keep_scroll
+        self._messages_bg.start(self._fetch_messages)
+
+    def _fetch_messages(self) -> list[dict[str, Any]]:
+        return api.read_messages(self.client, self.current_thread, limit=MESSAGE_PAGE)
+
+    def _collect_messages(self) -> None:
+        """Apply whatever the message job produced."""
+        finished = self._messages_bg.take()
+        if finished is None:
             return
-        if not keep_scroll:
+        result, error = finished
+        if error is not None:
+            self.status = _describe(error)
+            return
+        if isinstance(result, tuple):
+            thread, messages = result
+            self.current_thread = thread
+            self.messages = messages or []
+        else:
+            self.messages = result or []
+        if not self._keep_scroll:
             self.message_scroll.to_bottom(self._message_pane_height())
         else:
             self.message_scroll.clamp(self._message_pane_height())
+        self._keep_scroll = False
 
     def _open_initial(self) -> None:
-        try:
-            self.current_thread = api.get_thread(self.client, self.initial)
-        except SeraError as exc:
-            self.status = str(exc)
-            return
-        self._load_messages()
-        title = thread_title(self.current_thread)
-        for index, record in enumerate(self.threads):
-            if record["title"] == title:
-                self.selected = index
-                break
+        """Open a conversation given on the command line."""
+        self._loading_label = "Opening conversation"
+        self._spinner.label = self._loading_label
+        self._messages_bg.start(self._fetch_initial)
 
-    def _open_selected(self) -> None:
-        if not self.threads:
-            return
-        record = self.threads[self.selected]
-        try:
-            self.current_thread = api.get_thread(self.client, record["id"])
-        except SeraError as exc:
-            self.status = str(exc)
-            return
-        self._load_messages()
+    def _fetch_initial(self) -> tuple[Any, list[dict[str, Any]]]:
+        thread = api.get_thread(self.client, self.initial)
+        return thread, api.read_messages(self.client, thread, limit=MESSAGE_PAGE)
+
+    def _open_thread(self, record: dict[str, Any]) -> None:
+        """Open a conversation from the list."""
+        self._loading_label = "Opening conversation"
+        self._spinner.label = self._loading_label
+        self._messages_bg.start(self._fetch_thread, record["id"])
+
+    def _fetch_thread(self, thread_id: str) -> tuple[Any, list[dict[str, Any]]]:
+        thread = api.get_thread(self.client, thread_id)
+        return thread, api.read_messages(self.client, thread, limit=MESSAGE_PAGE)
 
     # --------------------------------------------------------------- layout
     def _layout(self) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int], int]:
@@ -145,8 +184,6 @@ class ChatTUI:
         message_geo = (1, list_width, body_height, max(10, width - list_width))
         return list_geo, message_geo, input_height
 
-    _screen_size = (24, 80)
-
     def _message_pane_height(self) -> int:
         _, message_geo, _ = self._layout()
         return max(1, message_geo[2] - 2)
@@ -156,6 +193,9 @@ class ChatTUI:
         self._screen_size = screen.getmaxyx()
         height, width = self._screen_size
         screen.erase()
+
+        # One spinner frame per draw, shared by every pane.
+        self._spinner_line = self._spinner.advance()
 
         list_geo, message_geo, input_height = self._layout()
 
@@ -186,6 +226,13 @@ class ChatTUI:
             self.thread_scroll.offset = self.selected - visible + 1
         self.thread_scroll.clamp(visible)
 
+        if not self.threads:
+            # The spinner stays in the wide status bar: a braille glyph is
+            # double width and would wrap the narrow pane.
+            label = "Loading…" if self._busy else "No conversations"
+            safe_addstr(pane.window, pane.y + 1, pane.x + 1, label, attr(3) if self._busy else curses.A_DIM)
+            return
+
         for row in range(visible):
             index = self.thread_scroll.offset + row
             if index >= len(self.threads):
@@ -210,6 +257,10 @@ class ChatTUI:
                 safe_addstr(pane.window, y + 1, x, preview, curses.A_DIM)
 
     def _draw_messages(self, pane: Pane) -> None:
+        if self._busy and not self.messages:
+            safe_addstr(pane.window, pane.y + 1, pane.x + 1, self._spinner_line, attr(3))
+            return
+
         lines = self._message_lines()
         visible = pane.inner_height
         self.message_scroll.total = len(lines)
@@ -272,6 +323,10 @@ class ChatTUI:
                 pass
 
     def _draw_status(self, screen: curses.window, width: int, height: int) -> None:
+        if self._busy:
+            text = self._spinner_line + " — Ctrl-C to cancel"
+            safe_addstr(screen, height - 1, 0, truncate(text, width - 1), attr(3))
+            return
         hints = "Tab pane  ↑↓ move  Enter open  / search  :q quit"
         if self.status:
             safe_addstr(screen, height - 1, 0, truncate(self.status, width - 1), attr(5))
@@ -288,7 +343,7 @@ class ChatTUI:
         if key == 27:  # escape
             self.buffer = ""
             return
-        if key in (curses.KEY_RESIZE,):
+        if key == curses.KEY_RESIZE:
             return
         if key == curses.KEY_BACKSPACE or key in (127, 8):
             self.buffer = self.buffer[:-1]
@@ -331,13 +386,6 @@ class ChatTUI:
         if key == ord("j") and self.focus == "threads":
             self._move(1)
             return
-        if key == ord(":"):
-            self._command_mode = True
-            self.buffer = ":"
-            return
-        if self.buffer.startswith(":") and key == 27:
-            self.buffer = ""
-            return
         if 32 <= key <= 126:
             self.buffer += chr(key)
 
@@ -345,19 +393,19 @@ class ChatTUI:
         if key == 27:
             self.searching = False
             self.search = ""
-            self._load_threads()
+            self._start_load_threads()
             return
         if key in (curses.KEY_ENTER, 10, 13):
             self.searching = False
-            self._load_threads()
+            self._start_load_threads()
             return
         if key in (curses.KEY_BACKSPACE, 127, 8):
             self.search = self.search[:-1]
-            self._load_threads()
+            self._start_load_threads()
             return
         if 32 <= key <= 126:
             self.search += chr(key)
-            self._load_threads()
+            self._start_load_threads()
 
     def _move(self, delta: int) -> None:
         if not self.threads:
@@ -376,7 +424,8 @@ class ChatTUI:
 
     def _on_enter(self) -> None:
         if self.focus == "threads":
-            self._open_selected()
+            if self.threads:
+                self._open_thread(self.threads[self.selected])
             self.focus = "input"
             try:
                 curses.curs_set(1)
@@ -408,16 +457,18 @@ class ChatTUI:
             self._running = False
             return
         if name in {"r", "refresh"}:
-            self._load_threads()
-            self._load_messages()
-            self.buffer = ""
-            return
-        if name in {"u", "unsend"}:
-            self.status = "Select a message with ↑↓ in the conversation pane first."
+            self._start_load_threads()
             self.buffer = ""
             return
         self.status = f"unknown command: {name}"
         self.buffer = ""
+
+
+def _describe(error: BaseException) -> str:
+    """Turn an exception into a short line for the status bar."""
+    if isinstance(error, SeraError):
+        return str(error)
+    return f"{type(error).__name__}: {error}"
 
 
 def _wrap(text: str, width: int) -> list[str]:
@@ -443,4 +494,4 @@ def run(client: Any, initial: str | None = None) -> None:
     ChatTUI(client, initial).run()
 
 
-__all__ = ["ChatTUI", "run", "message_to_dict"]
+__all__ = ["ChatTUI", "run"]

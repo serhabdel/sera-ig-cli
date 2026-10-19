@@ -125,12 +125,32 @@ through `windows-curses`, which is installed for you.
 ## Quick start
 
 ```bash
-seraig auth login          # sign in (asks for username, password, 2FA code)
-seraig inbox              # your conversations
-seraig read noor         # read a conversation
+seraig                      # the interactive shell
+seraig auth login           # sign in (asks for username, password, 2FA code)
+seraig inbox                # your conversations
+seraig read noor            # read a conversation
 seraig send noor --text "hi there"
-seraig tui chat           # the full keyboard-driven interface
+seraig tui chat             # the full keyboard-driven interface
 ```
+
+### The interactive shell
+
+Running `seraig` with no arguments opens a prompt where every command is
+available without repeating the program name:
+
+```
+seraig(@noor) ❯ inbox
+seraig(@noor) ❯ read noor
+seraig(@noor) ❯ send noor --text "hi there"
+```
+
+- `Tab` completes command names, subcommands and their options.
+- `↑`/`↓` walk the history; `Ctrl-R` searches it.
+- `-o json` works exactly as it does on the command line.
+- `help`, `clear` and `exit` are built in.
+- `tui chat` opens the full-screen interface from inside the shell.
+
+The shell is also available on its own with `seraig shell`.
 
 ### Two-factor authentication
 
@@ -222,9 +242,13 @@ fuzzy **conversation title** (`weekend plans`).
 
 ```bash
 seraig tui chat          # conversations + messages, keyboard driven
-seraig tui chat noor    # jump straight into a conversation
+seraig tui chat noor     # jump straight into a conversation
 seraig tui feed          # scroll the home timeline
 ```
+
+Every call to Instagram runs on a worker thread, so the interface is drawn
+immediately and keeps a spinner going while the network answers — you never
+stare at a blank screen.
 
 | Key | Action |
 | --- | --- |
@@ -322,7 +346,7 @@ cd sera-ig-cli
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest              # 101 tests, no network access needed
+pytest              # 145 tests, no network access needed
 ruff check .
 ```
 
