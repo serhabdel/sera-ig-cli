@@ -71,14 +71,48 @@ pipx install git+https://github.com/serhabdel/sera-ig-cli.git
 
 If the install stops with `Failed to install: sera_ig_cli-*.whl`, the real
 reason is printed just above that line — read it, or re-run with
-`pipx install --verbose …`. The usual cause is a stale pipx environment:
+`pipx install --verbose …`.
+
+**The most common Windows failure** is this one, and it is not a problem with
+this package:
+
+```
+Caused by: Failed to update Windows PE resources: C:\Users\…\Temp\.tmpXXXX\uv-trampoline-1234.exe
+Caused by: The system cannot open the device or file specified. (os error -2147024786)
+```
+
+pipx installs with [`uv`](https://github.com/astral-sh/uv) when it is
+available, and on Windows `uv` patches a small launcher `.exe` in `%TEMP%`.
+Antivirus and EDR products (Windows Defender, Bitdefender, Avast …) lock that
+file mid-write and the install dies. It is a known upstream issue:
+[astral-sh/uv#20792](https://github.com/astral-sh/uv/issues/20792).
+
+Use pip instead of uv — that skips the launcher entirely:
 
 ```powershell
 pipx uninstall sera-ig-cli
-pipx install git+https://github.com/serhabdel/sera-ig-cli.git
+pipx install --backend pip git+https://github.com/serhabdel/sera-ig-cli.git
 ```
 
-Plain pip works too, and prints the error in full:
+If the environment is already registered with the uv backend, `pipx` keeps
+using it — so either uninstall first as above, or rebuild it explicitly:
+
+```powershell
+pipx reinstall --backend pip sera-ig-cli
+```
+
+Other ways around it:
+
+```powershell
+# update uv — 0.9.9+ stores the launcher metadata differently
+uv self update
+
+# or point TEMP at a folder your antivirus does not scan
+$env:TEMP = "$env:USERPROFILE\tmp"; $env:TMP = $env:TEMP
+New-Item -ItemType Directory -Force $env:TEMP
+```
+
+Plain pip always works, and prints the error in full:
 
 ```powershell
 py -m pip install --user --upgrade pip
