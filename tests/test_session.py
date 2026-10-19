@@ -27,33 +27,33 @@ def test_missing_session_raises(config) -> None:
 
 def test_settings_round_trip(config) -> None:
     manager = SessionManager(config)
-    manager.write_settings("abdel", {"uuids": {"uuid": "abc"}, "cookies": {}})
-    assert manager.has_session("abdel") is True
-    assert manager.read_settings("abdel")["uuids"]["uuid"] == "abc"
+    manager.write_settings("noor", {"uuids": {"uuid": "abc"}, "cookies": {}})
+    assert manager.has_session("noor") is True
+    assert manager.read_settings("noor")["uuids"]["uuid"] == "abc"
 
 
 def test_session_file_is_stored_with_restrictive_permissions(config) -> None:
     manager = SessionManager(config)
-    manager.write_settings("abdel", {"uuids": {}})
-    mode = config.session_path("abdel").stat().st_mode & 0o777
+    manager.write_settings("noor", {"uuids": {}})
+    mode = config.session_path("noor").stat().st_mode & 0o777
     assert mode == 0o600
 
 
 def test_delete_session(config) -> None:
     manager = SessionManager(config)
-    manager.write_settings("abdel", {"uuids": {}})
-    assert manager.delete_session("abdel") is True
-    assert manager.delete_session("abdel") is False
+    manager.write_settings("noor", {"uuids": {}})
+    assert manager.delete_session("noor") is True
+    assert manager.delete_session("noor") is False
     assert manager.accounts() == []
 
 
 def test_default_username_prefers_the_current_account(config) -> None:
     manager = SessionManager(config)
-    manager.write_settings("abdel", {"uuids": {}})
+    manager.write_settings("noor", {"uuids": {}})
     manager.write_settings("sara", {"uuids": {}})
     config.set("login.current_username", "sara")
     assert manager.default_username() == "sara"
-    assert manager.accounts() == ["abdel", "sara"]
+    assert manager.accounts() == ["noor", "sara"]
 
 
 def test_resolve_raises_without_an_account(config) -> None:
@@ -64,30 +64,30 @@ def test_resolve_raises_without_an_account(config) -> None:
 
 def test_resolve_strips_the_at_sign(config) -> None:
     manager = SessionManager(config)
-    assert manager.resolve("@abdel") == "abdel"
+    assert manager.resolve("@noor") == "noor"
 
 
 def test_restore_loads_the_stored_session(config) -> None:
     manager = SessionManager(config)
-    manager.write_settings("abdel", {"uuids": {"uuid": "xyz"}, "cookies": {"a": "b"}})
-    client = manager.restore("abdel")
-    assert client.username == "abdel"
+    manager.write_settings("noor", {"uuids": {"uuid": "xyz"}, "cookies": {"a": "b"}})
+    client = manager.restore("noor")
+    assert client.username == "noor"
     assert client.get_settings()["uuids"]["uuid"] == "xyz"
 
 
 def test_corrupted_session_is_reported(config) -> None:
     manager = SessionManager(config)
-    path = config.session_path("abdel")
+    path = config.session_path("noor")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("{not json", encoding="utf-8")
     with pytest.raises(AuthError):
-        manager.read_settings("abdel")
+        manager.read_settings("noor")
 
 
 def test_config_records_the_active_account(config) -> None:
     manager = SessionManager(config)
-    manager.config.set("login.current_username", "abdel")
-    assert get_config().get("login.current_username") == "abdel"
+    manager.config.set("login.current_username", "noor")
+    assert get_config().get("login.current_username") == "noor"
 
 
 def test_fake_client_satisfies_the_session_interface() -> None:

@@ -3,7 +3,7 @@
 ``seraig read <thread>`` accepts any of:
 
 * a numeric thread id — ``340282366841510300949128268610842297468``
-* a username — ``@abdel`` or ``abdel``
+* a username — ``@noor`` or ``noor``
 * a fuzzy thread title — ``weekend plans``
 
 Resolution order is: exact thread id, then exact username, then fuzzy match on

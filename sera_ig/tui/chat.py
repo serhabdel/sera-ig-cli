@@ -4,7 +4,7 @@ Two panes: the conversation list on the left, the active conversation on the
 right, and an input line at the bottom. Everything is keyboard driven.
 
     seraig chat                 open the TUI
-    seraig chat @abdel          open straight into a conversation
+    seraig chat @noor          open straight into a conversation
 """
 
 from __future__ import annotations

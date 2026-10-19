@@ -30,7 +30,7 @@ def test_chat_tui_lists_threads(fake_client: FakeClient) -> None:
     tui = ChatTUI(fake_client)
     tui._load_threads()
     assert len(tui.threads) == 3
-    assert tui.threads[0]["title"] in {"abdel", "Weekend plans"}
+    assert tui.threads[0]["title"] in {"noor", "Weekend plans"}
 
 
 def test_chat_tui_opens_a_thread(fake_client: FakeClient) -> None:

@@ -29,7 +29,7 @@ Every command that targets a conversation takes a `<thread>` argument, resolved
 in this order:
 
 1. **Thread id** — a long number like `340282366841510300949128268610842297468`
-2. **Username** — an exact Instagram username (`abdel` or `@abdel`)
+2. **Username** — an exact Instagram username (`noor` or `@noor`)
 3. **Conversation title** — fuzzy match on the group title (`"weekend plans"`)
 
 **Best practice for multi-step work:** run `seraig inbox -o json` first, take
@@ -71,10 +71,10 @@ Returns a list of conversations:
 [
   {
     "id": "340282366841510300949128268610842297468",
-    "title": "abdel",
-    "usernames": ["abdel"],
+    "title": "noor",
+    "usernames": ["noor"],
     "is_group": false,
-    "last_activity_at": "2024-05-01T11:57:00+00:00",
+    "last_activity_at": "2026-05-01T11:57:00+00:00",
     "last_message": { "id": "9001", "kind": "text", "text": "hey there" }
   }
 ]
@@ -83,7 +83,7 @@ Returns a list of conversations:
 ### Read a conversation
 
 ```bash
-seraig read abdel -o json --limit 20
+seraig read noor -o json --limit 20
 seraig read 340282366841510300949128268610842297468 -o json --mark-seen
 ```
 
@@ -91,7 +91,7 @@ Messages come back **oldest first**, which is how a conversation reads.
 
 ```json
 {
-  "thread": { "id": "…", "title": "abdel", "usernames": ["abdel"] },
+  "thread": { "id": "…", "title": "noor", "usernames": ["noor"] },
   "messages": [
     { "id": "9001", "kind": "text", "text": "hey there", "timestamp": "…" }
   ]
@@ -101,9 +101,9 @@ Messages come back **oldest first**, which is how a conversation reads.
 ### Send a message
 
 ```bash
-seraig send abdel --text "see you at 8"
-seraig send abdel --media ./photo.jpg
-seraig send abdel --media ./clip.mp4 --text "watch this"
+seraig send noor --text "see you at 8"
+seraig send noor --media ./photo.jpg
+seraig send noor --media ./clip.mp4 --text "watch this"
 ```
 
 `kind` tells you what was actually sent: `text`, `media`, `media_share`,
@@ -112,10 +112,10 @@ seraig send abdel --media ./clip.mp4 --text "watch this"
 ### Reply, react, unsend, mark as read
 
 ```bash
-seraig reply abdel --message-id 9001 --text "sure, see you there"
-seraig react abdel --message-id 9001 --emoji "🔥"
-seraig unsend abdel --message-id 9001
-seraig seen abdel
+seraig reply noor --message-id 9001 --text "sure, see you there"
+seraig react noor --message-id 9001 --emoji "🔥"
+seraig unsend noor --message-id 9001
+seraig seen noor
 ```
 
 Message ids come from `read` — the `id` field of each message.
@@ -123,7 +123,7 @@ Message ids come from `read` — the `id` field of each message.
 ### Save an attachment
 
 ```bash
-seraig download-message abdel --message-id 9001 -d ./photo.jpg
+seraig download-message noor --message-id 9001 -d ./photo.jpg
 ```
 
 ### Find people
@@ -138,10 +138,10 @@ seraig search sara -o json
 seraig feed -o json --limit 10
 seraig reels -o json
 seraig stories -o json            # the people you follow
-seraig stories abdel -o json      # one account
+seraig stories noor -o json      # one account
 seraig notify -o json
-seraig user abdel -o json
-seraig posts abdel -o json
+seraig user noor -o json
+seraig posts noor -o json
 ```
 
 ### Posts

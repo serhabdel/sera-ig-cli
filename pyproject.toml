@@ -9,7 +9,7 @@ description = "Instagram in your terminal — a private-API Instagram client bui
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Abdelhalim Serhane", email = "serhaniabdelhalim@protonmail.com" }]
+authors = [{ name = "Seradyx Lab", email = "hello@seradyx.tech" }]
 keywords = [
     "instagram",
     "cli",
@@ -62,7 +62,7 @@ video = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/serhabdel/sera-ig-cli"
+Homepage = "https://seradyx.tech"
 Repository = "https://github.com/serhabdel/sera-ig-cli"
 Issues = "https://github.com/serhabdel/sera-ig-cli/issues"
 

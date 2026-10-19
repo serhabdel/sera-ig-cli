@@ -107,7 +107,7 @@ def test_inbox_search(connected) -> None:
 
 # --------------------------------------------------------------------- read
 def test_read_resolves_a_thread_by_username(connected) -> None:
-    result = run("-o", "json", "read", "abdel")
+    result = run("-o", "json", "read", "noor")
     assert result.exit_code == 0
     data = json.loads(result.stdout)
     assert data["messages"][0]["text"] == "hey there"
@@ -120,13 +120,13 @@ def test_read_reports_an_unknown_thread(connected) -> None:
 
 # --------------------------------------------------------------------- send
 def test_send_delivers_the_message(connected) -> None:
-    result = run("send", "abdel", "--text", "hello from the cli")
+    result = run("send", "noor", "--text", "hello from the cli")
     assert result.exit_code == 0
     assert connected.sent[-1]["text"] == "hello from the cli"
 
 
 def test_send_without_text_or_media_fails(connected) -> None:
-    result = run("send", "abdel")
+    result = run("send", "noor")
     assert result.exit_code != 0
 
 
@@ -137,19 +137,19 @@ def test_reply_passes_the_referenced_message(connected) -> None:
 
 
 def test_react_sends_the_emoji(connected) -> None:
-    result = run("react", "abdel", "--message-id", "9001", "--emoji", "🔥")
+    result = run("react", "noor", "--message-id", "9001", "--emoji", "🔥")
     assert result.exit_code == 0
     assert connected.reactions[-1]["emoji"] == "🔥"
 
 
 def test_unsend_deletes_the_message(connected) -> None:
-    result = run("unsend", "abdel", "--message-id", "9001")
+    result = run("unsend", "noor", "--message-id", "9001")
     assert result.exit_code == 0
     assert connected.unsent[-1]["message_id"] == 9001
 
 
 def test_seen_marks_the_thread(connected) -> None:
-    result = run("seen", "abdel")
+    result = run("seen", "noor")
     assert result.exit_code == 0
     assert connected.seen_threads
 
@@ -171,11 +171,11 @@ def test_reels_json(connected) -> None:
 def test_stories_json(connected) -> None:
     result = run("-o", "json", "stories")
     assert result.exit_code == 0
-    assert json.loads(result.stdout)[0]["user"]["username"] == "abdel"
+    assert json.loads(result.stdout)[0]["user"]["username"] == "noor"
 
 
 def test_stories_for_one_user(connected) -> None:
-    result = run("-o", "json", "stories", "abdel")
+    result = run("-o", "json", "stories", "noor")
     assert result.exit_code == 0
     assert json.loads(result.stdout)[0]["kind"] == "photo"
 
@@ -188,19 +188,19 @@ def test_notify_json(connected) -> None:
 
 # --------------------------------------------------------------------- user
 def test_user_profile(connected) -> None:
-    result = run("-o", "json", "user", "abdel")
+    result = run("-o", "json", "user", "noor")
     assert result.exit_code == 0
     assert json.loads(result.stdout)["followers"] == 345
 
 
 def test_posts(connected) -> None:
-    result = run("-o", "json", "posts", "abdel")
+    result = run("-o", "json", "posts", "noor")
     assert result.exit_code == 0
     assert len(json.loads(result.stdout)) == 1
 
 
 def test_followers(connected) -> None:
-    result = run("-o", "json", "followers", "abdel")
+    result = run("-o", "json", "followers", "noor")
     assert result.exit_code == 0
     assert json.loads(result.stdout)[0]["username"] == "fan1"
 

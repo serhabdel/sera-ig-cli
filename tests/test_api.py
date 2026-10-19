@@ -43,7 +43,7 @@ def test_media_to_dict_contains_code_and_url() -> None:
 def test_list_threads_returns_records(fake_client: FakeClient) -> None:
     records = api.list_threads(fake_client, amount=10)
     assert len(records) == 3
-    assert {r["title"] for r in records} >= {"abdel", "Weekend plans"}
+    assert {r["title"] for r in records} >= {"noor", "Weekend plans"}
 
 
 def test_list_threads_filters_by_search(fake_client: FakeClient) -> None:
@@ -59,7 +59,7 @@ def test_read_messages_is_oldest_first(fake_client: FakeClient) -> None:
 
 
 def test_send_text_records_the_call(fake_client: FakeClient) -> None:
-    thread = api.get_thread(fake_client, "abdel")
+    thread = api.get_thread(fake_client, "noor")
     record = api.send_text(fake_client, thread, "hi there")
     assert record["text"] == "hi there"
     assert fake_client.sent[-1]["thread_ids"] == [int(thread.id)]
@@ -72,13 +72,13 @@ def test_send_text_as_reply(fake_client: FakeClient) -> None:
 
 
 def test_reply_to_missing_message_raises(fake_client: FakeClient) -> None:
-    thread = api.get_thread(fake_client, "abdel")
+    thread = api.get_thread(fake_client, "noor")
     with pytest.raises(NotFoundError):
         api.send_text(fake_client, thread, "sure", reply_to={"id": "does-not-exist"})
 
 
 def test_react_and_unsend(fake_client: FakeClient) -> None:
-    thread = api.get_thread(fake_client, "abdel")
+    thread = api.get_thread(fake_client, "noor")
     api.react(fake_client, thread, "9001", "🔥")
     api.unsend(fake_client, thread, "9001")
     assert fake_client.reactions[-1]["emoji"] == "🔥"
@@ -86,14 +86,14 @@ def test_react_and_unsend(fake_client: FakeClient) -> None:
 
 
 def test_mark_seen(fake_client: FakeClient) -> None:
-    thread = api.get_thread(fake_client, "abdel")
+    thread = api.get_thread(fake_client, "noor")
     api.mark_seen(fake_client, thread)
     assert fake_client.seen_threads == [int(thread.id)]
 
 
 def test_search_users(fake_client: FakeClient) -> None:
-    records = api.search_users(fake_client, "abdel")
-    assert [r["username"] for r in records] == ["abdel", "abdelhamid"]
+    records = api.search_users(fake_client, "noor")
+    assert [r["username"] for r in records] == ["noor", "noorhan"]
 
 
 def test_timeline(fake_client: FakeClient) -> None:
@@ -110,12 +110,12 @@ def test_reels(fake_client: FakeClient) -> None:
 def test_stories_tray(fake_client: FakeClient) -> None:
     tray = api.stories_tray(fake_client)
     assert len(tray) == 1
-    assert tray[0]["user"]["username"] == "abdel"
+    assert tray[0]["user"]["username"] == "noor"
     assert tray[0]["story_count"] == 1
 
 
 def test_user_stories(fake_client: FakeClient) -> None:
-    stories = api.user_stories(fake_client, "abdel")
+    stories = api.user_stories(fake_client, "noor")
     assert len(stories) == 1
     assert stories[0]["kind"] == "photo"
 
@@ -127,14 +127,14 @@ def test_notifications(fake_client: FakeClient) -> None:
 
 
 def test_user_profile(fake_client: FakeClient) -> None:
-    record = api.user_profile(fake_client, "abdel")
-    assert record["username"] == "abdel"
+    record = api.user_profile(fake_client, "noor")
+    assert record["username"] == "noor"
     assert record["followers"] == 345
-    assert record["url"] == "https://www.instagram.com/abdel/"
+    assert record["url"] == "https://www.instagram.com/noor/"
 
 
 def test_user_posts(fake_client: FakeClient) -> None:
-    records = api.user_posts(fake_client, "abdel", amount=3)
+    records = api.user_posts(fake_client, "noor", amount=3)
     assert len(records) == 1
 
 

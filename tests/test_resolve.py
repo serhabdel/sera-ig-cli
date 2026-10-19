@@ -12,7 +12,7 @@ from .fakes import FakeClient, make_thread
 
 def test_thread_id_is_detected() -> None:
     assert looks_like_thread_id("340282366841510300949128268610842297468") is True
-    assert looks_like_thread_id("abdel") is False
+    assert looks_like_thread_id("noor") is False
 
 
 def test_resolve_by_exact_thread_id(fake_client: FakeClient) -> None:
@@ -21,12 +21,12 @@ def test_resolve_by_exact_thread_id(fake_client: FakeClient) -> None:
 
 
 def test_resolve_by_username(fake_client: FakeClient) -> None:
-    thread = resolve_thread(fake_client, "abdel")
-    assert "abdel" in [u.username for u in thread.users]
+    thread = resolve_thread(fake_client, "noor")
+    assert "noor" in [u.username for u in thread.users]
 
 
 def test_resolve_by_username_with_at_sign(fake_client: FakeClient) -> None:
-    thread = resolve_thread(fake_client, "@abdel")
+    thread = resolve_thread(fake_client, "@noor")
     assert thread.id == "340282366841510300949128268610842297468"
 
 

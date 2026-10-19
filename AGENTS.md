@@ -21,7 +21,7 @@ sera_ig/
 ├── api.py        # every call to Instagram; returns plain dicts
 ├── client.py     # session storage, login, 2FA / challenge handling
 ├── models.py     # instagrapi objects → flat JSON dicts
-├── resolve.py    # "abdel" / "weekend plans" → a DM thread
+├── resolve.py    # "noor" / "weekend plans" → a DM thread
 ├── output.py     # text and JSON rendering helpers
 ├── config.py     # the YAML settings store
 ├── errors.py     # instagrapi exceptions → user-facing messages

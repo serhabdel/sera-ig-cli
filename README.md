@@ -4,6 +4,8 @@
 [`instagrapi`](https://github.com/subzeroid/instagrapi) — chat, feed, stories
 and notifications without opening a browser.
 
+A [Seradyx Lab](https://seradyx.tech) project.
+
 > [!WARNING]
 > This project is not affiliated with, authorized by, or endorsed by Instagram
 > or Meta. It is an independent, unofficial project. Using the private API may
@@ -62,8 +64,8 @@ pip install "sera-ig-cli[video]"
 ```bash
 seraig auth login          # sign in (asks for username, password, 2FA code)
 seraig inbox              # your conversations
-seraig read abdel         # read a conversation
-seraig send abdel --text "hi there"
+seraig read noor         # read a conversation
+seraig send noor --text "hi there"
 seraig tui chat           # the full keyboard-driven interface
 ```
 
@@ -94,7 +96,7 @@ seraig tui chat           # the full keyboard-driven interface
 | `seraig download-message <thread> --message-id <id>` | Save an attachment |
 | `seraig search <name>` | Find people on Instagram |
 
-`<thread>` accepts a **thread id**, a **username** (`abdel` or `@abdel`), or a
+`<thread>` accepts a **thread id**, a **username** (`noor` or `@noor`), or a
 fuzzy **conversation title** (`weekend plans`).
 
 ### Browsing
@@ -125,7 +127,7 @@ fuzzy **conversation title** (`weekend plans`).
 
 ```bash
 seraig tui chat          # conversations + messages, keyboard driven
-seraig tui chat abdel    # jump straight into a conversation
+seraig tui chat noor    # jump straight into a conversation
 seraig tui feed          # scroll the home timeline
 ```
 
@@ -168,17 +170,17 @@ terminal escape codes.
 
 ```bash
 seraig inbox -o json
-seraig read abdel -o json --limit 5
-seraig send abdel --text "ping" -o json
+seraig read noor -o json --limit 5
+seraig send noor --text "ping" -o json
 ```
 
 ```json
 [
   {
     "id": "340282366841510300949128268610842297468",
-    "title": "abdel",
-    "users": [{ "pk": "123", "username": "abdel", "is_private": false }],
-    "last_activity_at": "2024-05-01T11:57:00+00:00",
+    "title": "noor",
+    "users": [{ "pk": "123", "username": "noor", "is_private": false }],
+    "last_activity_at": "2026-05-01T11:57:00+00:00",
     "last_message": {
       "id": "9001",
       "kind": "text",
@@ -206,7 +208,7 @@ sera_ig/
 ├── api.py        # every call to Instagram, returning plain dicts
 ├── client.py     # session storage, login, 2FA and challenge handling
 ├── models.py     # instagrapi objects → flat JSON
-├── resolve.py    # "abdel" / "weekend plans" → a thread
+├── resolve.py    # "noor" / "weekend plans" → a thread
 ├── commands/     # one module per command group
 ├── tui/          # the curses interfaces
 └── config.py     # the YAML settings store
@@ -240,4 +242,6 @@ model objects, so nothing touches the network.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT © 2026 Seradyx Lab — see [LICENSE](LICENSE).
+
+Made by [Seradyx Lab](https://seradyx.tech).

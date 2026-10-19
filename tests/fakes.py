@@ -21,7 +21,7 @@ from instagrapi.types import (
     UserShort,
 )
 
-NOW = datetime(2024, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def make_user(username: str, pk: str | None = None, full_name: str = "") -> UserShort:
@@ -61,7 +61,7 @@ def make_thread(
     messages: list[DirectMessage] | None = None,
     minutes_ago: int = 3,
 ) -> DirectThread:
-    usernames = usernames if usernames is not None else ["abdel"]
+    usernames = usernames if usernames is not None else ["noor"]
     users = [make_user(name) for name in usernames]
     return DirectThread(
         pk=f"pk-{thread_id}",
@@ -89,7 +89,7 @@ def make_thread(
 def make_media(
     pk: str = "3000000000000000001",
     code: str = "ABC123",
-    username: str = "abdel",
+    username: str = "noor",
     caption: str = "hello world",
     media_type: int = 1,
     product_type: str | None = None,
@@ -116,9 +116,9 @@ RAW_MEDIA = {
     "pk": "3000000000000000001",
     "id": "3000000000000000001_99",
     "code": "ABC123",
-    "taken_at": 1714564800,
+    "taken_at": 1777636800,
     "media_type": 1,
-    "user": {"pk": "99", "username": "abdel", "full_name": "Abdel"},
+    "user": {"pk": "99", "username": "noor", "full_name": "Noor"},
     "like_count": 42,
     "comment_count": 7,
     "caption": {"text": "hello world"},
@@ -153,7 +153,7 @@ class FakeClient:
     """A minimal but faithful stand-in for ``instagrapi.Client``."""
 
     def __init__(self) -> None:
-        self.username = "abdel"
+        self.username = "noor"
         self.user_id = 12345
         self.private = FakePrivate()
         self.sent: list[dict[str, Any]] = []
@@ -163,7 +163,7 @@ class FakeClient:
         self.threads = [
             make_thread(
                 thread_id="340282366841510300949128268610842297468",
-                usernames=["abdel"],
+                usernames=["noor"],
                 messages=[make_message("9001", "hey there", minutes_ago=2)],
             ),
             make_thread(
@@ -178,7 +178,7 @@ class FakeClient:
             ),
             make_thread(
                 thread_id="340282366841510300949128268610842297470",
-                usernames=["abdel", "mina"],
+                usernames=["noor", "mina"],
                 messages=[make_message("9004", "ping", user_id="pk-mina", minutes_ago=120)],
                 minutes_ago=120,
             ),
@@ -197,8 +197,8 @@ class FakeClient:
     def account_info(self) -> User:
         return User(
             pk="12345",
-            username="abdel",
-            full_name="Abdel",
+            username="noor",
+            full_name="Noor",
             is_private=False,
             profile_pic_url="https://cdn.example/pic.jpg",
             is_verified=False,
@@ -268,8 +268,8 @@ class FakeClient:
 
     def direct_search(self, query: str, mode: str = "universal") -> list[UserShort]:
         return [
-            make_user("abdel", pk="1", full_name="Abdel H"),
-            make_user("abdelhamid", pk="2", full_name="Abdel Hamid"),
+            make_user("noor", pk="1", full_name="Noor H"),
+            make_user("noorhan", pk="2", full_name="Noor Hamid"),
         ]
 
     def direct_thread_by_participants(self, user_ids: list[int]) -> dict[str, Any]:
@@ -294,13 +294,13 @@ class FakeClient:
         return {
             "tray": [
                 {
-                    "user": {"pk": "99", "username": "abdel", "full_name": "Abdel"},
+                    "user": {"pk": "99", "username": "noor", "full_name": "Noor"},
                     "items": [
                         {
                             "pk": "5001",
                             "id": "5001_99",
                             "code": "STORY1",
-                            "taken_at": 1714564800,
+                            "taken_at": 1777636800,
                             "media_type": 1,
                             "image_versions2": {
                                 "candidates": [
@@ -321,7 +321,7 @@ class FakeClient:
                 code="STORY2",
                 taken_at=NOW,
                 media_type=1,
-                user=make_user("abdel", pk="99"),
+                user=make_user("noor", pk="99"),
                 sponsor_tags=[],
                 mentions=[],
                 links=[],
@@ -339,7 +339,7 @@ class FakeClient:
                     "type": 1,
                     "args": {
                         "text": "liked your post",
-                        "timestamp": 1714564800,
+                        "timestamp": 1777636800,
                         "media": {"pk": "1", "code": "ABC123", "thumbnail_url": "https://cdn.example/t.jpg"},
                     },
                     "story": {"pk": "99", "username": "sara", "full_name": "Sara"},
@@ -389,7 +389,7 @@ class FakeClient:
         return SimpleNamespace(
             pk="c1",
             text=text,
-            user=make_user("abdel", pk="99"),
+            user=make_user("noor", pk="99"),
             created_at_utc=NOW,
             like_count=0,
         )
