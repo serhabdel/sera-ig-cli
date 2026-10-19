@@ -69,6 +69,35 @@ seraig send noor --text "hi there"
 seraig tui chat           # the full keyboard-driven interface
 ```
 
+### Two-factor authentication
+
+If your account has 2FA, the CLI handles it three ways — pick whichever fits:
+
+```bash
+# 1. interactive — it prompts for the code when Instagram asks for one
+seraig auth login --account youruser
+
+# 2. supply the code yourself (TOTP, an SMS/email code, or a backup code)
+seraig auth login --account youruser --password-stdin --code 123456
+
+# 3. fully unattended — store the TOTP seed once, then the code is
+#    generated locally and the login never asks for anything
+seraig config set login.totp_secret GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ
+echo 'your-password' | seraig auth login --account youruser --password-stdin
+```
+
+The TOTP seed is the base32 secret Instagram shows when you set up an
+authenticator app. It is read from `--totp-secret`, the `SERA_IG_TOTP_SECRET`
+environment variable, or `login.totp_secret` in the config — in that order.
+The config file is mode `0600`, and secret values are redacted by
+`seraig config get` / `list`.
+
+> The seed is a second factor. Anyone with it can generate valid codes for
+> your account. Keep it as private as your password.
+
+You only need this once: the session is stored and reused, so later commands
+never ask for a code again.
+
 ## Commands
 
 ### Authentication
@@ -80,6 +109,9 @@ seraig tui chat           # the full keyboard-driven interface
 | `seraig auth switch <user>` | Make another saved account the default |
 | `seraig auth whoami` | Show the account in use |
 | `seraig auth accounts` | List every account with a saved session |
+
+`auth login` takes `--account/-a`, `--password-stdin`, `--code` and
+`--totp-secret` — see [Two-factor authentication](#two-factor-authentication).
 
 ### Direct messages
 

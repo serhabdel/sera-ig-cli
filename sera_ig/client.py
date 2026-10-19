@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -44,8 +45,18 @@ class SeraClient(InstagrapiClient):
         self._code_prompt: CodePrompt = code_prompt or self._default_code_prompt
 
     def _default_code_prompt(self, username: str, channel: str) -> str | None:
+        """Ask the user for a verification code on the terminal."""
+        prompts = {
+            "totp": (
+                f"Enter the 2FA code for @{username} "
+                "(6 digits from your authenticator app, or the SMS/email code): "
+            ),
+            "sms": f"Enter the code sent to @{username} by SMS: ",
+            "email": f"Enter the code sent to @{username} by email: ",
+        }
+        question = prompts.get(channel, f"Enter the verification code for @{username}: ")
         try:
-            code = input(f"Enter the code sent to {username} via {channel}: ").strip()
+            code = input(question).strip()
         except (EOFError, KeyboardInterrupt):
             return None
         return code or None
@@ -54,6 +65,14 @@ class SeraClient(InstagrapiClient):
         """Handle an Instagram verification challenge (SMS / email code)."""
         channel = "sms" if str(choice).upper().endswith("SMS") else "email"
         return self._code_prompt(username, channel)
+
+    def ask_two_factor_code(self, username: str) -> str | None:
+        """Ask for the 2FA code when Instagram demands one mid-login."""
+        return self._code_prompt(username, "totp")
+
+    def totp_code(self, secret: str) -> str:
+        """Generate the current 6-digit TOTP code for *secret*."""
+        return self.totp_generate_code(secret.strip().replace(" ", "").upper())
 
 
 class SessionManager:
@@ -202,6 +221,24 @@ def connect(
             logger.debug("Could not persist the session for @%s", username, exc_info=True)
 
 
+def resolve_totp_secret(explicit: str | None, config: Config | None = None) -> str | None:
+    """Find the TOTP seed, in order: flag, environment, stored config.
+
+    The seed is the base32 secret shown by Instagram when two-factor
+    authentication is set up with an authenticator app. It is treated as a
+    secret: it is never logged and never printed.
+    """
+    candidates = [explicit, os.environ.get("SERA_IG_TOTP_SECRET")]
+    config = config or get_config()
+    stored = config.get("login.totp_secret")
+    if stored:
+        candidates.append(str(stored))
+    for candidate in candidates:
+        if candidate and candidate.strip():
+            return candidate.strip().replace(" ", "").upper()
+    return None
+
+
 def login(
     username: str,
     password: str,
@@ -209,23 +246,42 @@ def login(
     verification_code: str = "",
     manager: SessionManager | None = None,
     code_prompt: CodePrompt | None = None,
+    totp_secret: str | None = None,
 ) -> SeraClient:
     """Perform a fresh login and store the resulting session.
 
-    Handles the two-factor and verification-challenge round trips by asking
-    for the code when Instagram demands one.
+    Two-factor authentication is handled three ways, in order of preference:
+
+    1. a TOTP seed is available — the current 6-digit code is generated
+       locally, so the login needs no interaction at all;
+    2. a code was passed in — it is used as-is (TOTP, SMS or a backup code);
+    3. otherwise Instagram is asked for a code and the user is prompted.
     """
     manager = manager or SessionManager()
     client = manager.build_client(username)
     if code_prompt is not None:
         client._code_prompt = code_prompt
 
+    if not verification_code:
+        secret = resolve_totp_secret(totp_secret, manager.config)
+        if secret:
+            try:
+                verification_code = client.totp_code(secret)
+            except Exception as exc:
+                logger.debug("Could not generate a TOTP code: %s", exc)
+
     try:
         client.login(username, password, verification_code=verification_code or "")
     except TwoFactorRequired:
         if verification_code:
             raise
-        code = _ask_two_factor_code(username, code_prompt)
+        code = client.ask_two_factor_code(username)
+        if not code:
+            raise AuthError(
+                "A verification code is required to finish signing in. "
+                "Re-run `seraig auth login` and enter the code when asked, or "
+                "store a TOTP seed with `seraig config set login.totp_secret <seed>`."
+            ) from None
         client.login(username, password, verification_code=code)
 
     manager.write_settings(username, client.get_settings())
@@ -237,11 +293,12 @@ def login(
 def _ask_two_factor_code(username: str, code_prompt: CodePrompt | None) -> str:
     """Ask the user for a 6-digit 2FA / verification code."""
     prompt = code_prompt or (lambda _u, _c: None)
-    code = prompt(username, "email") or prompt(username, "sms")
+    code = prompt(username, "totp")
     if not code:
         raise AuthError(
             "A verification code is required to finish signing in. "
-            "Re-run `seraig auth login` and enter the code when asked."
+            "Re-run `seraig auth login` and enter the code when asked, or "
+            "store a TOTP seed with `seraig config set login.totp_secret <seed>`."
         )
     return code
 

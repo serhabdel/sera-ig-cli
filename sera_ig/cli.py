@@ -207,7 +207,7 @@ def config_command(
         return
 
     if action == "list":
-        records = [{"key": k, "value": v} for k, v in cfg.items()]
+        records = [{"key": k, "value": _redact(k, v)} for k, v in cfg.items()]
         emit(fmt, records, lambda: print_rows(records, ["key", "value"]))
         return
 
@@ -224,8 +224,8 @@ def config_command(
             raise typer.Exit(code=1)
         emit(
             fmt,
-            {"key": key, "value": current},
-            lambda: console.print(f"{key} = {current}"),
+            {"key": key, "value": _redact(key, current)},
+            lambda: console.print(f"{key} = {_redact(key, current)}"),
         )
         return
 
@@ -252,6 +252,14 @@ def config_command(
         return
 
     raise typer.BadParameter("Usage: seraig config [get|set|list|edit|reset]")
+
+
+def _redact(key: str, value: Any) -> Any:
+    """Hide secrets when a configuration value is printed."""
+    lowered = key.lower()
+    if any(word in lowered for word in ("secret", "password", "token", "key")) and value:
+        return "***"
+    return value
 
 
 def _coerce(raw: str) -> Any:

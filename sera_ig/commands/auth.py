@@ -42,7 +42,15 @@ def login(
         False, "--password-stdin", help="Read the password from stdin"
     ),
     code: str = typer.Option(
-        "", "--code", help="Two-factor code, when you already have it"
+        "", "--code", help="2FA code: 6-digit TOTP, SMS/email code, or a backup code"
+    ),
+    totp_secret: str = typer.Option(
+        None,
+        "--totp-secret",
+        help=(
+            "Base32 TOTP seed from your authenticator app. "
+            "Lets the login finish with no interaction at all."
+        ),
     ),
     output: str = typer.Option(None, "-o", "--output", help="Output format: text or json"),
 ) -> None:
@@ -56,7 +64,12 @@ def login(
 
     secret = _read_password(password, password_stdin, username)
 
-    client = perform_login(username, secret, verification_code=code)
+    client = perform_login(
+        username,
+        secret,
+        verification_code=code,
+        totp_secret=totp_secret,
+    )
     payload = {
         "account": client.username,
         "user_id": str(client.user_id),

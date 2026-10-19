@@ -26,6 +26,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "login": {
         "default_username": None,
         "current_username": None,
+        "totp_secret": None,
     },
     "chat": {
         "read_receipts": True,
@@ -101,10 +102,17 @@ class Config:
         self._data = _merge(defaults, raw)
 
     def save(self) -> None:
-        """Write the config back to disk."""
+        """Write the config back to disk.
+
+        The file may hold the two-factor seed, so it is kept private.
+        """
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "w", encoding="utf-8") as fh:
             yaml.safe_dump(self._data, fh, default_flow_style=False, sort_keys=False)
+        try:
+            self.path.chmod(0o600)
+        except OSError:  # pragma: no cover - platform dependent
+            pass
 
     # ------------------------------------------------------------- accessors
     def get(self, key: str, default: Any = None) -> Any:

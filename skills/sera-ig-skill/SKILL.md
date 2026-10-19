@@ -20,6 +20,11 @@ API. For agents it exposes **one-turn commands** that print to stdout and exit
 > Every one-turn command needs the user to be logged in (`seraig auth login`).
 > If a command returns an auth error, ask the user to log in themselves — do
 > not try to log in on their behalf, and never ask for their password.
+>
+> If the account has two-factor authentication, the user handles that too: the
+> CLI prompts for the code, accepts `--code`, or generates it from a stored
+> TOTP seed. Never ask the user for a 2FA code, an SMS code, a backup code,
+> or the TOTP seed — ask them to run `seraig auth login` themselves.
 
 ---
 
@@ -187,7 +192,6 @@ replying fast.
 | 3 | Thread, user or media not found | Check the id with `seraig inbox -o json` |
 | 4 | The command cannot work as asked | Fix the arguments |
 | 5 | Rate limited | Wait, then retry |
-
 Error messages are printed on stderr in a single line. A missing conversation
 suggests close matches — offer those to the user rather than guessing.
 
