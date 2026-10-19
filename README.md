@@ -59,6 +59,35 @@ Video uploads need a few extra system libraries:
 pip install "sera-ig-cli[video]"
 ```
 
+### On Windows
+
+Windows is supported, with one difference: the terminal interfaces need
+`curses`, which Windows does not ship. It is installed automatically as a
+dependency of the package, so a normal install is enough:
+
+```powershell
+pipx install git+https://github.com/serhabdel/sera-ig-cli.git
+```
+
+If the install stops with `Failed to install: sera_ig_cli-*.whl`, the real
+reason is printed just above that line — read it, or re-run with
+`pipx install --verbose …`. The usual cause is a stale pipx environment:
+
+```powershell
+pipx uninstall sera-ig-cli
+pipx install git+https://github.com/serhabdel/sera-ig-cli.git
+```
+
+Plain pip works too, and prints the error in full:
+
+```powershell
+py -m pip install --user --upgrade pip
+py -m pip install --user git+https://github.com/serhabdel/sera-ig-cli.git
+```
+
+The one-turn commands work on Windows without any of this. The TUI works
+through `windows-curses`, which is installed for you.
+
 ## Quick start
 
 ```bash

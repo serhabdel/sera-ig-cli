@@ -52,7 +52,10 @@ class ChatTUI:
     def _main(self, screen: curses.window) -> None:
         init_colors()
         screen.keypad(True)
-        curses.curs_set(1)
+        try:
+            curses.curs_set(1)
+        except curses.error:  # pragma: no cover - terminal dependent
+            pass
         screen.timeout(500)
         self._load_threads()
         if self.initial:
