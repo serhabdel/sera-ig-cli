@@ -189,13 +189,19 @@ def connect(
     *,
     manager: SessionManager | None = None,
     code_prompt: CodePrompt | None = None,
-    validate: bool = True,
+    validate: bool = False,
 ) -> Iterator[SeraClient]:
     """Yield a logged-in client for *account*.
 
     The stored session is restored and (optionally) validated with a cheap
     authenticated call. Session state is written back on exit so refreshed
     cookies survive the process.
+
+    Validation is off by default: it costs a full network round trip before
+    every command, and an expired session already surfaces as a
+    ``LoginRequired`` from the command itself — which the CLI turns into a
+    clear message. The interactive interfaces rely on this: they must draw
+    their first frame immediately, not after a slow round trip.
     """
     manager = manager or SessionManager()
     username = manager.resolve(account)

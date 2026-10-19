@@ -93,3 +93,68 @@ def test_config_records_the_active_account(config) -> None:
 def test_fake_client_satisfies_the_session_interface() -> None:
     client = FakeClient()
     assert isinstance(json.dumps(client.get_settings()), str)
+
+
+def test_connect_does_not_block_on_a_network_call(monkeypatch, config) -> None:
+    """Restoring a session must not make a request.
+
+    The interactive interfaces draw their first frame straight away, so the
+    up-front validation round trip would leave them blank on a slow link.
+    """
+    from sera_ig import client as client_module
+
+    manager = SessionManager(config)
+    manager.write_settings("noor", {"uuids": {}, "cookies": {}})
+
+    calls: list[str] = []
+
+    class SlowClient:
+        username = "noor"
+        user_id = 1
+
+        def get_settings(self) -> dict:
+            return {"uuids": {}}
+
+        def set_settings(self, settings: dict) -> bool:
+            return True
+
+        def account_info(self):
+            calls.append("account_info")
+            raise AssertionError("connect() must not validate up front")
+
+    monkeypatch.setattr(manager, "build_client", lambda username=None: SlowClient())
+    monkeypatch.setattr(client_module, "SessionManager", lambda config=None: manager)
+
+    with client_module.connect("noor", manager=manager) as client:
+        assert client.username == "noor"
+    assert calls == []
+
+
+def test_connect_can_still_validate(monkeypatch, config) -> None:
+    """The validation is opt-in, and it reports an expired session clearly."""
+    from instagrapi.exceptions import LoginRequired
+
+    from sera_ig import client as client_module
+
+    manager = SessionManager(config)
+    manager.write_settings("noor", {"uuids": {}, "cookies": {}})
+
+    class DeadClient:
+        username = "noor"
+        user_id = 1
+
+        def get_settings(self) -> dict:
+            return {"uuids": {}}
+
+        def set_settings(self, settings: dict) -> bool:
+            return True
+
+        def account_info(self):
+            raise LoginRequired("expired")
+
+    monkeypatch.setattr(manager, "build_client", lambda username=None: DeadClient())
+
+    with pytest.raises(AuthError) as excinfo:
+        with client_module.connect("noor", manager=manager, validate=True):
+            pass
+    assert "expired" in str(excinfo.value)
