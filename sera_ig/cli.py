@@ -326,7 +326,17 @@ def doctor() -> None:
     console.print(f"[bold]sera-ig-cli[/bold] {__version__}")
     console.print(f"config      {config.path}")
     console.print(f"data dir    {config.data_dir}")
-    console.print(f"accounts    {', '.join('@' + a for a in accounts) if accounts else 'none'}")
+    for name in accounts:
+        path = config.session_path(name)
+        exists = path.exists()
+        size = f"{path.stat().st_size} bytes" if exists else "missing"
+        console.print(f"session     {path}  [dim]({size})[/dim]")
+    if not accounts:
+        console.print("sessions    none — run `seraig auth login`")
+    console.print(
+        "[dim]Reinstalling the package never touches these files: "
+        "the session lives in the data dir, not in the program directory.[/dim]"
+    )
     try:
         import instagrapi
 
