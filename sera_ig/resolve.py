@@ -150,7 +150,7 @@ def _fuzzy_match(reference: str, threads: list[DirectThread]) -> DirectThread | 
 def _create_thread(client: Any, username: str) -> DirectThread:
     """Open a brand new thread with *username*."""
     try:
-        user = client.user_info(username)
+        user = client.user_info_by_username(username)
     except Exception as exc:
         raise NotFoundError(f"Could not find an Instagram account named '{username}'.") from exc
 

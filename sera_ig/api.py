@@ -277,7 +277,7 @@ def _first_candidate_url(image_versions: Any) -> str | None:
 
 def user_stories(client: Any, username: str) -> list[dict[str, Any]]:
     """Return the active stories of a single user."""
-    user = client.user_info(username)
+    user = _user_info(client, username)
     stories = client.user_stories(str(user.pk))
     return [story_to_dict(story) for story in stories]
 
@@ -349,9 +349,29 @@ def _activity_label(kind: Any) -> str:
 # ----------------------------------------------------------------------- user
 
 
+def _user_info(client: Any, username: str) -> Any:
+    """Look up a user, turning a failed lookup into a clear message."""
+    from instagrapi.exceptions import ClientGraphqlError
+
+    try:
+        return client.user_info_by_username(username)
+    except (NotFoundError, ClientGraphqlError) as exc:
+        raise NotFoundError(
+            f"No Instagram account named '{username}'. "
+            "Check the spelling, or search for it with `seraig search`."
+        ) from exc
+    except Exception as exc:
+        if type(exc).__name__ in ("UserNotFound", "ClientNotFoundError"):
+            raise NotFoundError(
+                f"No Instagram account named '{username}'. "
+                "Check the spelling, or search for it with `seraig search`."
+            ) from exc
+        raise
+
+
 def user_profile(client: Any, username: str) -> dict[str, Any]:
     """Return a profile summary for *username*."""
-    user = client.user_info(username)
+    user = _user_info(client, username)
     return {
         "pk": str(user.pk),
         "username": user.username,
@@ -370,21 +390,21 @@ def user_profile(client: Any, username: str) -> dict[str, Any]:
 
 def user_posts(client: Any, username: str, *, amount: int = 12) -> list[dict[str, Any]]:
     """Return the latest posts of *username*."""
-    user = client.user_info(username)
+    user = _user_info(client, username)
     medias = client.user_medias(str(user.pk), amount=amount)
     return [media_to_dict(media) for media in medias]
 
 
 def user_followers(client: Any, username: str, *, amount: int = 20) -> list[dict[str, Any]]:
     """Return the followers of *username*."""
-    user = client.user_info(username)
+    user = _user_info(client, username)
     followers = client.user_followers(str(user.pk), amount=amount)
     return [user_to_dict(follower) for follower in followers]
 
 
 def user_following(client: Any, username: str, *, amount: int = 20) -> list[dict[str, Any]]:
     """Return the accounts *username* follows."""
-    user = client.user_info(username)
+    user = _user_info(client, username)
     following = client.user_following(str(user.pk), amount=amount)
     return [user_to_dict(entry) for entry in following.values()]
 

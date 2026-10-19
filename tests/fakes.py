@@ -359,7 +359,7 @@ class FakeClient:
         }
 
     # ------------------------------------------------------------------ user
-    def user_info(self, username: str, use_cache: bool = True) -> User:
+    def user_info_by_username(self, username: str, use_cache: bool = True) -> User:
         return User(
             pk="99",
             username=username,
@@ -373,6 +373,10 @@ class FakeClient:
             biography="bio text",
             is_business=False,
         )
+
+    def user_info(self, user_id: str, use_cache: bool = True) -> User:
+        """instagrapi's user_info takes an id, not a username."""
+        return self.user_info_by_username(str(user_id))
 
     def user_medias(self, user_id: str, amount: int = 0, sleep: int = 0) -> list[Media]:
         return [make_media()]
