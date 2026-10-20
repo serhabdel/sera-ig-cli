@@ -183,6 +183,9 @@ Opening a conversation puts the cursor straight in the composer, so you can
 type a reply without touching the mouse. Consecutive messages from the same
 person are grouped into one block, exactly like the Instagram app.
 
+The conversations, the stories and the activity feed are all sorted by when
+they last happened, newest first.
+
 The interface is drawn immediately and keeps a spinner going while Instagram
 answers, so it never shows a blank screen — even on a slow connection.
 
@@ -325,9 +328,13 @@ clicking one opens the conversation it belongs to.
 
 ### Stories
 
-The Stories screen shows who has an active story. When the tray comes back
-empty, the app asks the people in your inbox directly, and the status line
-tells you what Instagram answered — so an empty screen is never a mystery:
+The Stories screen shows who has an active story, newest first. Click a
+person to open their stories: the picture is drawn in the terminal, the
+arrow keys move through them, and they move on by themselves.
+
+When the tray comes back empty, the app asks the people in your inbox
+directly, and the status line tells you what Instagram answered — so an
+empty screen is never a mystery:
 
 ```
 seraig stories --debug

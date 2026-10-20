@@ -240,6 +240,35 @@ def _media_kind(media: Media) -> str:
     return {1: "photo", 2: "video", 8: "album"}.get(media.media_type, "media")
 
 
+def sort_by_recency(
+    records: list[dict[str, Any]], key: str = "last_activity_at"
+) -> list[dict[str, Any]]:
+    """Sort records by when they last happened, most recent first.
+
+    The timestamps are compared as real instants, not as strings: a string
+    comparison gets the order wrong as soon as two records carry different
+    timezone offsets, and it puts the empty ones wherever they land.
+    """
+    from datetime import datetime, timezone
+
+    def moment(record: dict[str, Any]) -> float:
+        value = record.get(key)
+        if isinstance(value, datetime):
+            stamp = value
+        elif isinstance(value, str) and value:
+            try:
+                stamp = datetime.fromisoformat(value)
+            except ValueError:
+                return 0.0
+        else:
+            return 0.0
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        return stamp.timestamp()
+
+    return sorted(records, key=moment, reverse=True)
+
+
 def story_to_dict(story: Story | None) -> dict[str, Any]:
     """Project a story into a flat dict."""
     if story is None:

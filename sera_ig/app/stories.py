@@ -11,13 +11,13 @@ from textual.widgets import Label, Static
 
 from .. import api
 from ..output import format_time
-from .widgets import Avatar, RecordPanel
+from .widgets import Avatar, Clickable, RecordPanel
 
 STORY_LIMIT = 20
 
 
-class StoryCard(Static):
-    """One user's stories."""
+class StoryCard(Clickable):
+    """One user's stories. Clicking it opens the viewer."""
 
     def __init__(
         self,
@@ -69,7 +69,14 @@ class StoriesPanel(RecordPanel):
     }
     .story-avatar {
         width: 5;
-        content-align: center middle;
+        height: 100%;
+        content-align: left top;
+    }
+    StoryCard {
+        height: auto;
+    }
+    .story-card {
+        height: auto;
     }
     .story-body {
         width: 1fr;

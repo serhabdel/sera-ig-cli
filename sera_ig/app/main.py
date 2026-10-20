@@ -317,6 +317,12 @@ class SeraApp(App):
 
         self.push_screen(ActionMenu("Conversation", actions), done)
 
+    def show_story(self, record: dict[str, Any]) -> None:
+        """Open somebody's stories."""
+        from .story import StoryScreen
+
+        self.push_screen(StoryScreen(self.client, record))
+
     def rename_conversation(self, panel: Any, record: dict[str, Any]) -> None:
         """Ask for a new name for a group conversation."""
         from .menu import PromptScreen

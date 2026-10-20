@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sera-ig-cli"
-version = "0.4.1"
+version = "0.5.0"
 description = "Instagram in your terminal — a private-API Instagram client built on instagrapi"
 readme = "README.md"
 requires-python = ">=3.10"

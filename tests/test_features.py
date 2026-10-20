@@ -188,3 +188,68 @@ def test_the_stories_tray_reports_the_response_keys() -> None:
     keys = api.stories_raw_keys(Client())
     assert "tray" in keys
     assert "status" in keys
+
+
+# ------------------------------------------------------------------ sorting
+def test_records_are_sorted_by_recency() -> None:
+    from sera_ig.models import sort_by_recency
+
+    records = [
+        {"name": "old", "last_activity_at": "2026-05-01T10:00:00+00:00"},
+        {"name": "new", "last_activity_at": "2026-05-03T10:00:00+00:00"},
+        {"name": "middle", "last_activity_at": "2026-05-02T10:00:00+00:00"},
+    ]
+    assert [r["name"] for r in sort_by_recency(records)] == ["new", "middle", "old"]
+
+
+def test_timezone_offsets_do_not_break_the_order() -> None:
+    """A string comparison gets this wrong; comparing instants does not."""
+    from sera_ig.models import sort_by_recency
+
+    records = [
+        {"name": "later", "last_activity_at": "2026-05-01T12:30:00+02:00"},
+        {"name": "earlier", "last_activity_at": "2026-05-01T10:00:00+00:00"},
+    ]
+    # 12:30+02:00 is 10:30 UTC, which is after 10:00 UTC.
+    assert [r["name"] for r in sort_by_recency(records)] == ["later", "earlier"]
+
+
+def test_records_without_a_time_go_last() -> None:
+    from sera_ig.models import sort_by_recency
+
+    records = [
+        {"name": "none"},
+        {"name": "some", "last_activity_at": "2026-05-01T10:00:00+00:00"},
+    ]
+    assert [r["name"] for r in sort_by_recency(records)] == ["some", "none"]
+
+
+# ------------------------------------------------------------------- viewer
+async def test_the_story_viewer_opens(app) -> None:
+    from sera_ig.app.story import StoryScreen
+
+    record = {
+        "user": {"username": "noor"},
+        "stories": [
+            {"pk": "1", "kind": "photo", "taken_at": "2026-05-01T10:00:00+00:00",
+             "thumbnail_url": None},
+            {"pk": "2", "kind": "photo", "taken_at": "2026-05-01T11:00:00+00:00",
+             "thumbnail_url": None},
+        ],
+    }
+    async with app.run_test() as pilot:
+        app.show_story(record)
+        await pilot.pause()
+        assert isinstance(app.screen, StoryScreen)
+        assert app.screen.index == 0
+
+        await pilot.press("right")
+        await pilot.pause()
+        assert app.screen.index == 1
+
+        await pilot.press("left")
+        await pilot.pause()
+        assert app.screen.index == 0
+
+        await pilot.press("escape")
+        await pilot.pause()

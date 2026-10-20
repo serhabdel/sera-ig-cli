@@ -20,6 +20,7 @@ from .models import (
     media_thumbnail,
     media_to_dict,
     message_to_dict,
+    sort_by_recency,
     story_to_dict,
     thread_to_dict,
     user_to_dict,
@@ -63,8 +64,7 @@ def list_threads(
             if needle not in haystack:
                 continue
         records.append(record)
-    records.sort(key=lambda item: item.get("last_activity_at") or "", reverse=True)
-    return records
+    return sort_by_recency(records)
 
 
 def get_thread(client: Any, reference: str, *, create: bool = False) -> DirectThread:
@@ -314,9 +314,12 @@ def _stories_from_reels_tray(
                 },
                 "story_count": len(stories),
                 "stories": stories,
+                "last_activity_at": max(
+                    (story.get("taken_at") or "" for story in stories), default=""
+                ),
             }
         )
-    return records
+    return sort_by_recency(records)
 
 
 def _stories_from_users(client: Any, user_ids: list[str]) -> list[dict[str, Any]]:
@@ -336,9 +339,10 @@ def _stories_from_users(client: Any, user_ids: list[str]) -> list[dict[str, Any]
 
     records: list[dict[str, Any]] = []
     for user in users or []:
-        stories = getattr(user, "stories", None) or []
-        if not stories:
+        raw_stories = getattr(user, "stories", None) or []
+        if not raw_stories:
             continue
+        stories = [story_to_dict(story) for story in raw_stories]
         records.append(
             {
                 "user": {
@@ -352,10 +356,13 @@ def _stories_from_users(client: Any, user_ids: list[str]) -> list[dict[str, Any]
                     ),
                 },
                 "story_count": len(stories),
-                "stories": [story_to_dict(story) for story in stories],
+                "stories": stories,
+                "last_activity_at": max(
+                    (story.get("taken_at") or "" for story in stories), default=""
+                ),
             }
         )
-    return records
+    return sort_by_recency(records)
 
 
 def conversation_user_ids(client: Any, amount: int = 20) -> list[str]:
@@ -471,7 +478,7 @@ def notifications(client: Any, *, limit: int = 20) -> list[dict[str, Any]]:
         )
         if len(records) >= limit:
             break
-    return records
+    return sort_by_recency(records)
 
 
 def _activity_label(kind: Any) -> str:
@@ -753,8 +760,7 @@ def pending_requests(client: Any, amount: int = 20) -> list[dict[str, Any]]:
     except Exception:
         return []
     records = [thread_to_dict(thread) for thread in threads or []]
-    records.sort(key=lambda item: item.get("last_activity_at") or "", reverse=True)
-    return records
+    return sort_by_recency(records)
 
 
 # ------------------------------------------------------------------- actions
