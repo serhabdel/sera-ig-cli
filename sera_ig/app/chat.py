@@ -313,6 +313,7 @@ class ChatPanel(PanelBase):
         self.loaded = False
         self.typing = False
         self._cache: dict[str, list[dict[str, Any]]] = {}
+        self._pending_bubble: MessageBubble | None = None
         self.selected_message: str | None = None
         self._filter_timer: Any = None
 
@@ -351,11 +352,17 @@ class ChatPanel(PanelBase):
             self._apply_conversations,
         )
 
-    def _apply_conversations(self, records: list[dict[str, Any]]) -> None:
+    async def _apply_conversations(self, records: list[dict[str, Any]]) -> None:
+        """Show the conversations.
+
+        Removing and mounting are both deferred in Textual, so they have to
+        be awaited: otherwise a second render can land on top of the first
+        one and the widget ids collide.
+        """
         self.conversations = records or []
         self.loaded = True
         listing = self.query_one("#conversation-list", ListView)
-        listing.clear()
+        await listing.clear()
         show_avatar = self.app.show_avatars
         for index, record in enumerate(self.conversations):
             row = ConversationRow(
@@ -364,7 +371,7 @@ class ChatPanel(PanelBase):
                 client=self.client,
                 id=f"conversation-{index}",
             )
-            listing.append(ListItem(row, id=f"conversation-item-{index}"))
+            await listing.append(ListItem(row, id=f"conversation-item-{index}"))
         if not self.conversations:
             self.set_status("No conversations")
         else:
@@ -420,25 +427,40 @@ class ChatPanel(PanelBase):
             return self.current_thread
         return api.get_thread(self.client, record["id"])
 
-    def _apply_thread(self, result: tuple[Any, list[dict[str, Any]]]) -> None:
+    async def _apply_thread(self, result: tuple[Any, list[dict[str, Any]]]) -> None:
         self.current_thread, records = result
         if self.current is not None:
             self._cache[self.current["id"]] = records
-        self._apply_messages(records)
+        await self._apply_messages(records)
 
-    def _apply_messages(self, records: list[dict[str, Any]]) -> None:
+    async def _apply_messages(self, records: list[dict[str, Any]]) -> None:
+        """Show the messages of the open conversation.
+
+        The removal and the mounting are awaited, so a refresh can never
+        leave two bubbles with the same id in the list.
+        """
         self.messages = records or []
         container = self.query_one("#message-list", VerticalScroll)
-        container.remove_children()
+        await container.remove_children()
+        bubbles = []
+        seen: set[str] = set()
         for record in self.messages:
-            bubble = MessageBubble(
-                record,
-                client=self.client,
-                protocol=self.app.image_protocol,
-                selected=record["id"] == self.selected_message,
-                id=f"message-{record['id']}",
+            key = str(record.get("id"))
+            if key in seen:
+                # Instagram can repeat a message; showing it twice would
+                # also collide on the widget id.
+                continue
+            seen.add(key)
+            bubbles.append(
+                MessageBubble(
+                    record,
+                    client=self.client,
+                    protocol=self.app.image_protocol,
+                    selected=record["id"] == self.selected_message,
+                    id=f"message-{key}",
+                )
             )
-            container.mount(bubble)
+        await container.mount_all(bubbles)
         container.scroll_end(animate=False)
         self.set_status("")
 
@@ -466,17 +488,28 @@ class ChatPanel(PanelBase):
             "media": None,
             "pending": True,
         }
-        self._append_bubble(optimistic)
+
+        async def show() -> None:
+            self._pending_bubble = await self._append_bubble(optimistic)
+
+        # Show it straight away, then let the server have its say.
+        self.app.call_next(show)
 
         def work() -> Any:
             return api.send_text(self.client, self._thread_for(self.current), text)
 
         self.fetch(work, self._confirm_sent, self._failed_to_send)
 
-    def _confirm_sent(self, record: dict[str, Any]) -> None:
-        self._remove_bubble(f"pending-{len(self.messages)}")
+    async def _confirm_sent(self, record: dict[str, Any]) -> None:
+        """Swap the optimistic bubble for the one the server confirmed."""
+        pending = self._pending_bubble
+        self._pending_bubble = None
+        if pending is not None:
+            await pending.remove()
+        else:
+            await self._remove_bubble(f"pending-{len(self.messages)}")
         self.messages.append(record)
-        self._append_bubble(record)
+        await self._append_bubble(record)
 
     def _failed_to_send(self, exc: BaseException) -> None:
         from .worker import describe_error
@@ -484,7 +517,8 @@ class ChatPanel(PanelBase):
         self.set_status(f"Could not send: {describe_error(exc)}", error=True)
         self.app.report_error(exc)
 
-    def _append_bubble(self, record: dict[str, Any]) -> None:
+    async def _append_bubble(self, record: dict[str, Any]) -> MessageBubble:
+        """Add one bubble to the conversation and return it."""
         container = self.query_one("#message-list", VerticalScroll)
         bubble = MessageBubble(
             record,
@@ -492,12 +526,14 @@ class ChatPanel(PanelBase):
             protocol=self.app.image_protocol,
             id=f"message-{record['id']}",
         )
-        container.mount(bubble)
+        await container.mount(bubble)
         container.scroll_end(animate=False)
+        return bubble
 
-    def _remove_bubble(self, bubble_id: str) -> None:
+    async def _remove_bubble(self, bubble_id: str) -> None:
+        """Take a bubble out of the conversation, waiting for it to go."""
         for bubble in self.query(f"#message-{bubble_id}"):
-            bubble.remove()
+            await bubble.remove()
 
     def select_message(self, message_id: str) -> None:
         """Mark a message as selected and show the action bar."""

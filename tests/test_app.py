@@ -144,3 +144,49 @@ async def test_a_failing_fetch_keeps_the_app_alive(app: SeraApp, monkeypatch) ->
         assert failed
         assert app.is_running
         await pilot.pause()
+
+
+async def test_rerendering_the_messages_does_not_collide(app: SeraApp) -> None:
+    """A refresh landing on a pending render must not duplicate the widgets.
+
+    Textual defers both removing and mounting widgets, so a second render
+    that does not wait for the first one leaves two bubbles with the same
+    id, and the application crashes.
+    """
+    from sera_ig.app.chat import ChatPanel
+
+    async with app.run_test() as pilot:
+        await wait_for(lambda: len(app.query_one("#conversation-list").children) > 0, pilot)
+        await pilot.click("#conversation-item-0")
+        await wait_for(lambda: len(app.query_one("#message-list").children) > 0, pilot)
+
+        panel = app.query_one(ChatPanel)
+        messages = list(panel.messages)
+        assert messages
+
+        await panel._apply_messages(messages)
+        await panel._apply_messages(messages)
+
+        assert len(app.query_one("#message-list").children) == len(messages)
+        assert app.is_running
+        await pilot.pause()
+
+
+async def test_a_repeated_message_is_only_shown_once(app: SeraApp) -> None:
+    """Instagram can repeat a message; showing it twice would collide."""
+    from sera_ig.app.chat import ChatPanel
+
+    async with app.run_test() as pilot:
+        await wait_for(lambda: len(app.query_one("#conversation-list").children) > 0, pilot)
+        await pilot.click("#conversation-item-0")
+        await wait_for(lambda: len(app.query_one("#message-list").children) > 0, pilot)
+
+        panel = app.query_one(ChatPanel)
+        messages = list(panel.messages)
+        assert messages
+
+        await panel._apply_messages(messages + messages)
+
+        assert len(app.query_one("#message-list").children) == len(messages)
+        assert app.is_running
+        await pilot.pause()

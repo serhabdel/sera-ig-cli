@@ -203,14 +203,20 @@ class RecordPanel(PanelBase):
         self.set_status("Loading…")
         self.fetch(self.fetch_records, self.apply_records)
 
-    def apply_records(self, records: list[dict[str, Any]]) -> None:
-        """Show the fetched records."""
+    async def apply_records(self, records: list[dict[str, Any]]) -> None:
+        """Show the fetched records.
+
+        The removal and the mounting are awaited: both are deferred in
+        Textual, and without the wait a refresh can leave two widgets with
+        the same id in the list.
+        """
         self.records = records or []
         self.loaded = True
         listing = self.query_one(".record-list")
-        listing.remove_children()
-        for index, record in enumerate(self.records):
-            listing.mount(self.row_for(record, index))
+        await listing.remove_children()
+        await listing.mount_all(
+            [self.row_for(record, index) for index, record in enumerate(self.records)]
+        )
         self.set_status("" if self.records else self.empty_message())
 
     def reload(self) -> None:
