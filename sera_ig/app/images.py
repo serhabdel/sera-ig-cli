@@ -199,3 +199,53 @@ def cache_dir(config: Any = None) -> Any:
     path = config.data_dir / "cache"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def avatar_cache_path(pk: str, config: Any = None) -> Any:
+    """Return where the cached picture of a user lives."""
+    from ..config import get_config
+
+    config = config or get_config()
+    directory = cache_dir(config) / "avatars"
+    directory.mkdir(parents=True, exist_ok=True)
+    safe = "".join(character for character in str(pk) if character.isalnum() or character in "-_")
+    return directory / f"{safe or 'unknown'}.jpg"
+
+
+def fetch_avatar(client: Any, user: dict[str, Any], config: Any = None) -> Any | None:
+    """Download and cache the profile picture of *user*.
+
+    Returns the path of the cached file, or ``None`` when there is no picture
+    or it cannot be fetched. The result is cached on disk, so this is only
+    ever called once per user.
+    """
+    url = user.get("profile_pic_url")
+    pk = user.get("pk")
+    if not url or not pk:
+        return None
+
+    target = avatar_cache_path(str(pk), config)
+    if target.exists() and target.stat().st_size > 0:
+        return target
+
+    try:
+        response = client.private.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.content
+    except Exception:
+        return None
+
+    try:
+        target.write_bytes(data)
+    except OSError:
+        return None
+    return target
+
+
+def render_avatar_image(path: Any, size: int = 3) -> Any | None:
+    """Render a cached profile picture as a small image."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    return render_image(data, size * 2, "halfblock", height=size)

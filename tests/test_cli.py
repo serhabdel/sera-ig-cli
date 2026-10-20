@@ -35,10 +35,42 @@ def run(*args: str):
 
 
 # ------------------------------------------------------------------ generic
-def test_banner_is_shown_without_a_command() -> None:
+def test_bare_command_opens_the_app(monkeypatch) -> None:
+    """With no subcommand, the graphical application is launched."""
+    opened: dict[str, str | None] = {}
+    monkeypatch.setattr(
+        cli, "_open_app", lambda screen=None: opened.setdefault("screen", screen)
+    )
     result = run()
     assert result.exit_code == 0
-    assert "seraig" in result.stdout.lower() or "brainrot" in result.stdout.lower()
+    assert "screen" in opened
+
+
+def test_the_app_command_opens_the_app(monkeypatch) -> None:
+    opened: dict[str, str | None] = {}
+    monkeypatch.setattr(
+        cli, "_open_app", lambda screen=None: opened.setdefault("screen", screen)
+    )
+    result = run("app")
+    assert result.exit_code == 0
+    assert opened["screen"] is None
+
+
+def test_the_tui_commands_open_the_right_screen(monkeypatch) -> None:
+    opened: dict[str, str | None] = {}
+    monkeypatch.setattr(
+        cli, "_open_app", lambda screen=None: opened.setdefault("screen", screen)
+    )
+    for command, screen in (
+        ("chat", "chats"),
+        ("feed", "feed"),
+        ("stories", "stories"),
+        ("notify", "notifications"),
+    ):
+        opened.clear()
+        result = run("tui", command)
+        assert result.exit_code == 0
+        assert opened["screen"] == screen
 
 
 def test_version_flag() -> None:

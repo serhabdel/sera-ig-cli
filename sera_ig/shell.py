@@ -139,7 +139,7 @@ def _print_help() -> None:
 
 def _needs_terminal(args: list[str]) -> bool:
     """Whether the command takes over the whole terminal."""
-    return bool(args) and args[0] == "tui"
+    return bool(args) and args[0] in ("tui", "app")
 
 
 def run(args: list[str] | None = None) -> int:

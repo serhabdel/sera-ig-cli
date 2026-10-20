@@ -34,3 +34,11 @@ def fake_client():
     from .fakes import FakeClient
 
     return FakeClient()
+
+
+@pytest.fixture
+def app(fake_client):
+    """The application, wired to the fake client."""
+    from sera_ig.app.main import SeraApp
+
+    return SeraApp(fake_client)

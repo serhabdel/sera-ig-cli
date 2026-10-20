@@ -21,7 +21,7 @@ from .commands import user as user_cmds
 from .config import get_config
 from .errors import SeraError
 from .output import console, fail, ok
-from .state import resolve_output, set_state
+from .state import get_state, resolve_output, set_state
 
 logger = logging.getLogger("sera_ig")
 
@@ -104,9 +104,8 @@ def root(
     if ctx.invoked_subcommand is not None:
         return
 
-    # No subcommand: greet and drop into the interactive shell.
-    print_banner()
-    _open_shell()
+    # No subcommand: open the graphical application.
+    _open_app()
 
 
 def _open_shell() -> None:
@@ -136,16 +135,21 @@ app.add_typer(auth_cmds.app, name="auth", help="Sign in, sign out and manage acc
 
 
 # ------------------------------------------------------------------ tui group
+def _open_app(screen: str | None = None) -> None:
+    """Launch the graphical application."""
+    from .app import run_app
+
+    with connect(get_state().account) as client:
+        run_app(client, screen)
+
+
 @tui_app.command("chat")
 def tui_chat(
     thread: str = typer.Argument(None, help="Open straight into this conversation"),
     account: str = typer.Option(None, "--account", "-a", help="Account to use"),
 ) -> None:
     """Open the interactive chat interface."""
-    from .tui import run_chat
-
-    with connect(account or None) as client:
-        run_chat(client, thread)
+    _open_app("chats")
 
 
 @tui_app.command("feed")
@@ -153,13 +157,26 @@ def tui_feed(
     account: str = typer.Option(None, "--account", "-a", help="Account to use"),
 ) -> None:
     """Open the interactive feed browser."""
-    from .tui import run_feed
-
-    with connect(account or None) as client:
-        run_feed(client)
+    _open_app("feed")
 
 
-app.add_typer(tui_app, name="tui", help="Interactive terminal interfaces.")
+@tui_app.command("stories")
+def tui_stories(
+    account: str = typer.Option(None, "--account", "-a", help="Account to use"),
+) -> None:
+    """Open the stories."""
+    _open_app("stories")
+
+
+@tui_app.command("notify")
+def tui_notify(
+    account: str = typer.Option(None, "--account", "-a", help="Account to use"),
+) -> None:
+    """Open the activity feed."""
+    _open_app("notifications")
+
+
+app.add_typer(tui_app, name="tui", help="The graphical interface.")
 
 
 # ------------------------------------------------------------- direct messages
@@ -306,7 +323,20 @@ def version_command() -> None:
     console.print(f"sera-ig-cli {__version__}")
 
 
-@app.command("shell", help="Open the interactive shell.")
+@app.command("app", help="Open the graphical application.")
+def app_command(
+    screen: str = typer.Option(
+        None, "--screen", "-s", help="Screen to open: chats, feed, stories, notifications, settings"
+    ),
+    account: str = typer.Option(None, "--account", "-a", help="Account to use"),
+) -> None:
+    """Open the graphical application."""
+    if account:
+        set_state(account=account.lstrip("@").strip())
+    _open_app(screen)
+
+
+@app.command("shell", help="Open the classic command prompt.")
 def shell_command(
     account: str = typer.Option(None, "--account", "-a", help="Account to use"),
 ) -> None:
