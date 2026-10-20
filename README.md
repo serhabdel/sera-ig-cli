@@ -25,7 +25,8 @@ The end of brainrot and doomscrolling is here.
 
 ## Why?
 
-- **Keyboard only.** No mouse, no touchscreen, no infinite scroll.
+- **A real app in your terminal.** Five screens, a working mouse, and twenty-one
+  themes — not a list of subcommands.
 - **Scriptable.** Every command takes `-o json` for machine-readable output.
 - **Agent-friendly.** A flat, stable JSON schema on every single command.
 - **One login, forever.** The session is stored locally and reused; you
@@ -61,9 +62,8 @@ pip install "sera-ig-cli[video]"
 
 ### On Windows
 
-Windows is supported, with one difference: the terminal interfaces need
-`curses`, which Windows does not ship. It is installed automatically as a
-dependency of the package, so a normal install is enough:
+Windows is fully supported — the app, the mouse and the themes all work there.
+A normal install is enough:
 
 ```powershell
 pipx install git+https://github.com/serhabdel/sera-ig-cli.git
@@ -119,24 +119,71 @@ py -m pip install --user --upgrade pip
 py -m pip install --user git+https://github.com/serhabdel/sera-ig-cli.git
 ```
 
-The one-turn commands work on Windows without any of this. The TUI works
-through `windows-curses`, which is installed for you.
+The one-turn commands work on Windows without any of this.
+
+Older consoles (the classic `conhost` rather than Windows Terminal) may not
+report mouse clicks. The app stays fully usable from the keyboard there.
 
 ## Quick start
 
 ```bash
-seraig                      # the interactive shell
+seraig                      # the app — a graphical interface in your terminal
 seraig auth login           # sign in (asks for username, password, 2FA code)
 seraig inbox                # your conversations
 seraig read noor            # read a conversation
 seraig send noor --text "hi there"
-seraig tui chat             # the full keyboard-driven interface
+seraig shell                # the classic command prompt
 ```
 
-### The interactive shell
+### The app
 
-Running `seraig` with no arguments opens a prompt where every command is
-available without repeating the program name:
+Running `seraig` with no arguments opens a graphical interface in the
+terminal — five screens, a mouse, and themes:
+
+```
+┌─ Chats ───────────────────────────────────────────────────────────────────┐
+│ ⭘  seraig — Instagram in your terminal                                     │
+│  Chats   Feed   Stories   Notifications   Settings                        │
+├──────────────────────┬───────────────────────────────────────────────────┤
+│  Filter conversations │  noor                                              │
+│ ┌────────────────────┐│                                                   │
+│ │  N   noor           ││  ▏ 2026-05-01 11:58                               │
+│ │      hey there      ││    hey there                                      │
+│ │  S   Weekend plans  ││                                                   │
+│ │      works for me  ││  ▏ 2026-05-01 11:58                               │
+│ └────────────────────┘│    La ana                                          │
+├──────────────────────┴───────────────────────────────────────────────────┤
+│ ❯ write a message…                                    [ Send ]              │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Everything works with the mouse**: click a conversation to open it, click a
+message to select it, scroll to move through the conversation, click a button
+to act. Every mouse action has a keyboard equivalent, so the app is fully
+usable from the keyboard alone.
+
+| Key | Action |
+| --- | --- |
+| `Ctrl+P` | Command palette — runs the CLI commands and the app actions |
+| `Ctrl+T` | Cycle to the next theme |
+| `Ctrl+R` | Reload what is on screen |
+| `Ctrl+F` | Focus the conversation filter |
+| `Ctrl+Enter` | Send the message you are writing |
+| `Ctrl+Q` | Quit |
+| `Tab` | Move between panes |
+| `↑` `↓` / `j` `k` | Move through a list |
+| `Esc` | Close the overlay, or drop the selection |
+| Click | Open a conversation, or select a message |
+| Double click | Copy a message |
+| Scroll | Scroll the list or the conversation |
+
+The interface is drawn immediately and keeps a spinner going while Instagram
+answers, so it never shows a blank screen — even on a slow connection.
+
+### The classic prompt
+
+`seraig shell` opens a prompt where every command is available without
+repeating the program name:
 
 ```
 seraig(@noor) ❯ inbox
@@ -238,27 +285,70 @@ fuzzy **conversation title** (`weekend plans`).
 
 `<media>` accepts a numeric id, a short code (`ABC123`) or a full URL.
 
-### The TUI
+### The app screens
 
 ```bash
-seraig tui chat          # conversations + messages, keyboard driven
-seraig tui chat noor     # jump straight into a conversation
-seraig tui feed          # scroll the home timeline
+seraig                    # the app, on the Chats screen
+seraig app                # the same thing, said explicitly
+seraig app --screen feed  # open straight on the feed
+seraig tui chat           # the Chats screen
+seraig tui feed           # the Feed screen
+seraig tui stories        # the Stories screen
+seraig tui notify         # the Notifications screen
 ```
 
-Every call to Instagram runs on a worker thread, so the interface is drawn
-immediately and keeps a spinner going while the network answers — you never
-stare at a blank screen.
-
-| Key | Action |
+| Screen | What it shows |
 | --- | --- |
-| `Tab` | Switch between the conversation list and the input |
-| `↑` `↓` (or `j` / `k`) | Move through the list / scroll messages |
-| `Enter` | Open a conversation, or send what you typed |
-| `/` | Search conversations |
-| `:r` | Refresh |
-| `:q` | Quit |
-| `Ctrl-C` | Quit |
+| **Chats** | The conversation list, the open conversation, and a composer |
+| **Feed** | The posts of the people you follow |
+| **Stories** | The stories of the people you follow |
+| **Notifications** | Likes, comments, follows and mentions |
+| **Settings** | Themes, the image protocol, the toggles and the key map |
+
+### Themes
+
+Twenty-one themes ship with the app — `nord`, `gruvbox`, `tokyo-night`,
+`solarized-light`, `atom-one-dark`, `catppuccin-mocha`, `dracula`, `flexoki`,
+`rose-pine` and more. `Ctrl+T` cycles through them, the Settings screen picks
+one, and the choice is remembered.
+
+```bash
+seraig theme list          # every theme, and which one is active
+seraig theme set nord      # use it from now on
+seraig theme show nord     # the colours it resolves to
+```
+
+Your own themes go in `~/.sera-ig-cli/themes/<name>.json`:
+
+```json
+{
+  "primary": "#88C0D0",
+  "secondary": "#81A1C1",
+  "accent": "#B48EAD",
+  "background": "#2E3440",
+  "variables": { "panel": "#3B4252" }
+}
+```
+
+### Images
+
+Every conversation and post shows a coloured avatar with the person's
+initial. The colour comes from a hash of the username, so it is the same on
+every machine and never waits on the network.
+
+Set `ui.avatar_images` to `true` to fetch the real profile pictures — they are
+cached in `~/.sera-ig-cli/cache/avatars/`.
+
+Media attached to a message is drawn in the terminal. The protocol is
+detected automatically:
+
+```bash
+seraig config set ui.image_protocol halfblock
+```
+
+`auto` (the default) picks `kitty` in Kitty and WezTerm, `iterm2` in iTerm2,
+and `halfblock` everywhere else. You can also force `ascii`, `braille`,
+`kitty`, `iterm2`, `sixel`, or turn images off with `none`.
 
 ### Configuration
 
@@ -338,10 +428,24 @@ sera_ig/
 ├── client.py     # session storage, login, 2FA and challenge handling
 ├── models.py     # instagrapi objects → flat JSON
 ├── resolve.py    # "noor" / "weekend plans" → a thread
-├── commands/     # one module per command group
-├── tui/          # the curses interfaces
+├── commands/     # one module per command group — the agent API
+├── app/          # the Textual application
+│   ├── main.py   # the root app: tabs, theme, palette
+│   ├── chat.py   # conversations, messages, the composer
+│   ├── feed.py   stories.py  notify.py  settings.py
+│   ├── widgets.py  palette.py  themes.py  images.py  worker.py
+├── shell.py      # the classic prompt
 └── config.py     # the YAML settings store
 ```
+
+The application is built on
+[Textual](https://github.com/Textualize/textual), which gives it real mouse
+support on Linux, macOS **and** Windows, twenty-one themes, a command
+palette, and a headless test driver that can simulate clicks in CI.
+
+Every call to Instagram is blocking, and the interface is driven by an event
+loop, so every call runs on a worker thread and the result is handed back to
+the interface. That is what keeps the app responsive on a slow connection.
 
 Sessions are stored per account and reused. After a successful login the
 cookies and device identifiers are written to
@@ -356,12 +460,14 @@ cd sera-ig-cli
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest              # 145 tests, no network access needed
+pytest              # 185 tests, no network access needed
 ruff check .
 ```
 
 The test suite runs entirely against a fake client that returns real instagrapi
-model objects, so nothing touches the network.
+model objects, so nothing touches the network. The application is tested
+headlessly, driving it with synthetic key presses and **mouse clicks** through
+Textual's `Pilot`, and a few screens are checked against SVG snapshots.
 
 ## Credits
 

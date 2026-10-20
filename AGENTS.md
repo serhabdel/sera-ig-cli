@@ -7,12 +7,14 @@ on this repository.
 
 - `sera-ig-cli` is an **Instagram terminal client written in Python**, built on
   the private mobile API via [`instagrapi`](https://github.com/subzeroid/instagrapi).
-- The CLI framework is **typer**; the output is **rich**; the TUI is **curses**
-  (no third-party TUI library).
+- There are **two surfaces**, and both matter:
+  - **one-turn commands** (`seraig inbox`, `seraig send …`) — for humans, scripts
+    and agents. This is a **frozen public contract**; the JSON shapes are
+    stable and must not change.
+  - **the application** (`seraig`, `seraig app`) — a [Textual](https://github.com/Textualize/textual)
+    app with tabs, a mouse, and themes. This is where new UI work happens.
+- The CLI framework is **typer**; the output is **rich**; the app is **Textual**.
 - The console script is `seraig`.
-- Two surfaces exist and both matter:
-  - **one-turn commands** (`seraig inbox`, `seraig send …`) — for humans, scripts and agents;
-  - **the TUI** (`seraig tui chat`) — keyboard-driven, for humans.
 
 ## Layout
 
@@ -26,8 +28,18 @@ sera_ig/
 ├── config.py     # the YAML settings store
 ├── errors.py     # instagrapi exceptions → user-facing messages
 ├── state.py      # the account and output format for the current run
-├── commands/     # one module per command group
-└── tui/          # the curses interfaces
+├── commands/     # one module per command group — the agent API
+├── app/          # the Textual application
+│   ├── main.py   # the root app: tabs, theme, palette
+│   ├── chat.py   # conversations, messages, the composer
+│   ├── feed.py   # stories.py    notify.py   settings.py
+│   ├── widgets.py  # avatars, rows, bubbles, record panels
+│   ├── palette.py  # the command palette provider
+│   ├── themes.py   # built-in themes + user theme files
+│   ├── images.py   # protocol detection, avatars, thumbnails
+│   └── worker.py   # running the blocking calls off the event loop
+├── shell.py      # the classic prompt_toolkit prompt
+└── click_compat.py  # click, standalone or vendored inside typer
 ```
 
 ## Build, test and lint
@@ -54,9 +66,21 @@ seraig --help          # smoke test the CLI
   `output.py`.
 - **Wrap every instagrapi call** so a failure becomes a short message instead
   of a traceback. `errors.translate()` maps the library's exceptions onto
-  `SeraError` subclasses; the CLI turns those into an exit code.
+  `SeraError` subclasses; the CLI turns those into an exit code. The handler
+  table resolves exception names **dynamically** — instagrapi renames them
+  between releases and a missing class must never break the translator.
 - **Keep `connect()` as the only way to reach a logged-in client.** It handles
-  session restore, validation and saving refreshed cookies.
+  session restore and saving refreshed cookies. It does **not** validate the
+  session up front: that costs a round trip before every command, and an
+  expired session already surfaces as `LoginRequired`.
+- **Never block the event loop.** Every call to Instagram is blocking and the
+  app is driven by asyncio, so every call must run inside `app/worker.py`'s
+  `run()` — which uses `@work(thread=True)` and hands the result back with
+  `call_from_thread`. A call on the loop thread freezes the interface.
+- **`request_timeout` in instagrapi is a pause between requests, not an HTTP
+  timeout.** It is bound to `advanced.request_delay` (1 second). A session
+  restored from disk carries its own value, so the delay is re-applied after
+  `set_settings()`.
 - **Sessions are secrets.** They live in `~/.sera-ig-cli/users/<username>/`
   with mode `0600`. Never commit them, never log them.
 - **Do not add bot behaviour.** This is a client for a human's own account:
@@ -72,9 +96,28 @@ seraig --help          # smoke test the CLI
   ```python
   monkeypatch.setattr(client_module, "connect", fake_connect)
   ```
-- The curses layer is hard to test. Keep the logic it depends on pure and
-  testable (see `tests/test_tui.py`), and verify the real interface in a pty.
+- The app is tested **headlessly** with `App.run_test()` and Textual's
+  `Pilot`, which can press keys and **click widgets**:
+  ```python
+  async with app.run_test() as pilot:
+      await pilot.click("#conversation-item-0")
+  ```
+- A few screens are checked against SVG snapshots in `tests/snapshots/`.
+  Delete a file to record a new one.
 - New commands need: a text renderer, a JSON payload, and a CLI test.
+- New app behaviour needs: a headless app test.
+
+## Gotchas worth knowing
+
+- A widget's stylesheet lives in `DEFAULT_CSS`, **not** `CSS` — `CSS` is
+  ignored on widgets, and only `App` uses it.
+- `Widget.refresh()` is a Textual built-in; do not shadow it. Use `reload()`.
+- `App.current_theme` is the `Theme` object, not its name — use `App.theme`
+  to set it, and `theme_name` to read the name back.
+- Textual CSS takes integer margins, not percentages. To right-align a
+  widget, set `align-horizontal: right` on it.
+- A `Static` inside a `ListItem` must not stop the click event, or the
+  `ListView` never selects it.
 
 ## Security considerations
 
