@@ -323,6 +323,16 @@ seraig tui notify         # the Notifications screen
 conversations that are long gone from your inbox. The results are grouped and
 clicking one opens the conversation it belongs to.
 
+### Stories
+
+The Stories screen shows who has an active story. When the tray comes back
+empty, the app asks the people in your inbox directly, and the status line
+tells you what Instagram answered — so an empty screen is never a mystery:
+
+```
+seraig stories --debug
+```
+
 ### Presence, receipts and the action menu
 
 - **Active now** — a green dot next to the people who are online at the

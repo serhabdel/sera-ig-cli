@@ -229,16 +229,71 @@ def explore_reels(client: Any, *, amount: int = 20) -> list[dict[str, Any]]:
 # -------------------------------------------------------------------- stories
 
 
-def stories_tray(client: Any) -> list[dict[str, Any]]:
-    """Return the stories tray (people you follow who have active stories)."""
-    response = client.get_reels_tray_feed("cold_start")
+def stories_tray(
+    client: Any,
+    user_ids: list[str] | None = None,
+    *,
+    keys: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Return the stories tray (people you follow who have active stories).
+
+    The tray endpoint is asked first. When it comes back empty — Instagram
+    moves this payload around, and it sometimes answers with something else —
+    the people you have conversations with are asked directly, which is the
+    same thing the tray shows.
+    """
+    records = _stories_from_reels_tray(client, keys)
+    if records:
+        return records
+    return _stories_from_users(client, user_ids or [])
+
+
+def stories_raw_keys(client: Any) -> list[str]:
+    """Return the top level keys of the tray response.
+
+    Useful when the tray is empty and it is not clear why.
+    """
+    try:
+        response = client.get_reels_tray_feed("cold_start")
+    except Exception as exc:
+        return [f"error: {exc}"]
+    if isinstance(response, dict):
+        return sorted(response)
+    return [f"unexpected response: {type(response).__name__}"]
+
+
+def _stories_from_reels_tray(
+    client: Any, keys: list[str] | None = None
+) -> list[dict[str, Any]]:
+    """Read the stories out of the reels tray response."""
+    try:
+        response = client.get_reels_tray_feed("cold_start")
+    except Exception as exc:
+        if keys is not None:
+            keys.append(f"error: {exc}")
+        return []
+
+    if not isinstance(response, dict):
+        if keys is not None:
+            keys.append(f"unexpected response: {type(response).__name__}")
+        return []
+    if keys is not None:
+        keys.extend(sorted(response))
+
     tray = response.get("tray") or response.get("stories") or []
+    if isinstance(tray, dict):
+        tray = list(tray.values())
+    if not isinstance(tray, list):
+        return []
+
     records: list[dict[str, Any]] = []
     for entry in tray:
         if not isinstance(entry, dict):
             continue
         user = entry.get("user") or {}
-        items = entry.get("items") or []
+        items = entry.get("items") or entry.get("media") or []
+        if not isinstance(items, list):
+            continue
         stories = []
         for story in items:
             try:
@@ -262,6 +317,59 @@ def stories_tray(client: Any) -> list[dict[str, Any]]:
             }
         )
     return records
+
+
+def _stories_from_users(client: Any, user_ids: list[str]) -> list[dict[str, Any]]:
+    """Ask the given users directly whether they have stories.
+
+    This is the same GraphQL call the tray is built on, done for a known
+    list of people, so it still works when the tray endpoint does not.
+    """
+    wanted = [str(uid) for uid in user_ids if uid][:50]
+    if not wanted:
+        return []
+
+    try:
+        users = client.users_stories_gql([int(uid) for uid in wanted])
+    except Exception:
+        return []
+
+    records: list[dict[str, Any]] = []
+    for user in users or []:
+        stories = getattr(user, "stories", None) or []
+        if not stories:
+            continue
+        records.append(
+            {
+                "user": {
+                    "pk": str(user.pk),
+                    "username": user.username,
+                    "full_name": user.full_name or "",
+                    "is_private": bool(user.is_private),
+                    "is_verified": bool(user.is_verified),
+                    "profile_pic_url": (
+                        str(user.profile_pic_url) if user.profile_pic_url else None
+                    ),
+                },
+                "story_count": len(stories),
+                "stories": [story_to_dict(story) for story in stories],
+            }
+        )
+    return records
+
+
+def conversation_user_ids(client: Any, amount: int = 20) -> list[str]:
+    """Return the ids of the people you have conversations with."""
+    try:
+        threads = client.direct_threads(amount=amount, thread_message_limit=1)
+    except Exception:
+        return []
+    ids: list[str] = []
+    for thread in threads or []:
+        for user in thread.users:
+            if user.pk and str(user.pk) not in ids:
+                ids.append(str(user.pk))
+    return ids
 
 
 def _build_story(raw: dict[str, Any], user: dict[str, Any]) -> Any:

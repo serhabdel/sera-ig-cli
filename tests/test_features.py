@@ -138,3 +138,53 @@ async def test_the_search_overlay_shows_results(app, monkeypatch) -> None:
         assert listing.option_count == 1
         await pilot.press("escape")
         await pilot.pause()
+
+
+# ------------------------------------------------------------------- stories
+def test_the_stories_tray_falls_back_to_asking_the_people_directly() -> None:
+    """When the tray endpoint is empty, the people are asked one by one."""
+    from sera_ig import api
+
+    class Client:
+        def get_reels_tray_feed(self, reason="cold_start"):
+            return {"tray": [], "status": "ok"}
+
+        def users_stories_gql(self, user_ids):
+            from datetime import datetime, timezone
+
+            from instagrapi.types import Story, UserShort
+
+            user = UserShort(pk="1", username="noor", full_name="Noor")
+            user.stories = [
+                Story(
+                    pk="9",
+                    id="9_1",
+                    code="S1",
+                    taken_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+                    media_type=1,
+                    user=UserShort(pk="1", username="noor", full_name="Noor"),
+                    sponsor_tags=[],
+                    mentions=[],
+                    links=[],
+                    hashtags=[],
+                    locations=[],
+                    stickers=[],
+                )
+            ]
+            return [user]
+
+    records = api.stories_tray(Client(), ["1"])
+    assert len(records) == 1
+    assert records[0]["user"]["username"] == "noor"
+
+
+def test_the_stories_tray_reports_the_response_keys() -> None:
+    from sera_ig import api
+
+    class Client:
+        def get_reels_tray_feed(self, reason="cold_start"):
+            return {"tray": [], "reels_tray": {}, "status": "ok"}
+
+    keys = api.stories_raw_keys(Client())
+    assert "tray" in keys
+    assert "status" in keys

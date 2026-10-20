@@ -52,6 +52,9 @@ def stories(
     username: str = typer.Argument(None, help="Show the stories of one account"),
     account: str = typer.Option(None, "--account", "-a", help="Account to use"),
     output: str = typer.Option(None, "-o", "--output", help="Output format: text or json"),
+    debug: bool = typer.Option(
+        False, "--debug", help="Also show what Instagram answered for the stories tray"
+    ),
 ) -> None:
     """Show the stories of the people you follow, or of one account."""
     fmt = resolve_output(output)
@@ -60,5 +63,11 @@ def stories(
             records = api.user_stories(client, username.lstrip("@"))
             emit(fmt, records, lambda: _render_user_stories(records))
         else:
-            tray = api.stories_tray(client)
+            tray = api.stories_tray(client) or api.stories_tray(
+                client, api.conversation_user_ids(client)
+            )
             emit(fmt, tray, lambda: _render_tray(tray))
+            if debug:
+                console.print(
+                    f"[dim]tray response keys: {', '.join(api.stories_raw_keys(client))}[/dim]"
+                )

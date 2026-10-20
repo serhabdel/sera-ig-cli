@@ -155,8 +155,18 @@ class SeraApp(App):
 
     # -------------------------------------------------------------- panels
     def _panel_for(self, screen: str | None) -> Any:
-        """Return the panel shown on *screen*."""
-        entry = PANELS.get(screen or "")
+        """Return the panel shown on *screen*.
+
+        The tab buttons carry an id with a ``--content-tab-`` prefix, so the
+        prefix has to come off before the name can be looked up.
+        """
+        if not screen:
+            return None
+        name = screen
+        prefix = "--content-tab-"
+        if name.startswith(prefix):
+            name = name[len(prefix) :]
+        entry = PANELS.get(name)
         if entry is None:
             return None
         for panel in self.query(entry[1]):
@@ -171,10 +181,9 @@ class SeraApp(App):
 
     def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
         """Load a panel the first time its tab is opened."""
-        panel = self._panel_for(event.tab.id)
+        panel = self._panel_for(getattr(event, "pane", None) and event.pane.id or event.tab.id)
         if panel is not None and hasattr(panel, "loaded") and not panel.loaded:
             panel.reload()
-
     # -------------------------------------------------------------- themes
     def set_theme(self, name: str) -> None:
         """Switch to the theme called *name* and remember it."""

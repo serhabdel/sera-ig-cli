@@ -190,3 +190,22 @@ async def test_a_repeated_message_is_only_shown_once(app: SeraApp) -> None:
         assert len(app.query_one("#message-list").children) == len(messages)
         assert app.is_running
         await pilot.pause()
+
+
+async def test_opening_a_tab_loads_its_panel(app: SeraApp) -> None:
+    import asyncio
+
+    from sera_ig.app import main as app_main
+
+    async with app.run_test() as pilot:
+        for screen in ("feed", "stories", "notifications"):
+            panel_class = app_main.PANELS[screen][1]
+            panel = app.query_one(panel_class)
+            assert panel.loaded is False, f"{screen} was loaded too early"
+
+            app.goto_screen(screen)
+            deadline = asyncio.get_event_loop().time() + 5
+            while not panel.loaded and asyncio.get_event_loop().time() < deadline:
+                await pilot.pause(0.05)
+            assert panel.loaded is True, f"{screen} never loaded"
+            assert panel.records, f"{screen} loaded nothing"

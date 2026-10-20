@@ -86,13 +86,26 @@ class StoriesPanel(RecordPanel):
     def __init__(self, client: Any, **kwargs: Any) -> None:
         super().__init__(client, **kwargs)
         self.tray: list[dict[str, Any]] = []
+        self._keys: list[str] = []
 
     def compose(self) -> ComposeResult:
         yield Static("", classes="record-panel-status")
         yield VerticalScroll(classes="record-list")
 
     def fetch_records(self) -> list[dict[str, Any]]:
-        return api.stories_tray(self.client)
+        """The stories of the people you have conversations with.
+
+        The tray endpoint is asked first; when it comes back empty, the
+        people in your inbox are asked directly.
+        """
+        keys: list[str] = []
+        records = api.stories_tray(self.client, keys=keys)
+        if not records:
+            records = api.stories_tray(
+                self.client, api.conversation_user_ids(self.client), keys=keys
+            )
+        self._keys = keys
+        return records
 
     def row_for(self, record: dict[str, Any], index: int) -> Any:
         return StoryCard(
@@ -102,4 +115,6 @@ class StoriesPanel(RecordPanel):
             id=f"story-{index}")
 
     def empty_message(self) -> str:
-        return "No active stories"
+        if self._keys:
+            return f"No active stories (Instagram answered: {', '.join(self._keys)})"
+        return "No active stories right now"
