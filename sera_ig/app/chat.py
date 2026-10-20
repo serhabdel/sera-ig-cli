@@ -309,6 +309,10 @@ class ChatPanel(PanelBase):
         self.conversations: list[dict[str, Any]] = []
         self.messages: list[dict[str, Any]] = []
         self.current: dict[str, Any] | None = None
+        self.current_thread: Any = None
+        self.loaded = False
+        self.typing = False
+        self._cache: dict[str, list[dict[str, Any]]] = {}
         self.selected_message: str | None = None
         self._filter_timer: Any = None
 
@@ -349,6 +353,7 @@ class ChatPanel(PanelBase):
 
     def _apply_conversations(self, records: list[dict[str, Any]]) -> None:
         self.conversations = records or []
+        self.loaded = True
         listing = self.query_one("#conversation-list", ListView)
         listing.clear()
         show_avatar = self.app.show_avatars
@@ -364,6 +369,27 @@ class ChatPanel(PanelBase):
             self.set_status("No conversations")
         else:
             self.set_status(f"{len(self.conversations)} conversations")
+            self._prefetch_first()
+
+    def _prefetch_first(self) -> None:
+        """Warm the first conversation, so the first click is instant.
+
+        It is off by default: it costs a request that is wasted when the
+        first conversation is never opened.
+        """
+        if self._cache or not self.conversations:
+            return
+        if not self.app.prefetch:
+            return
+        thread_id = self.conversations[0]["id"]
+
+        def work() -> Any:
+            return api.read_conversation(self.client, thread_id, limit=MESSAGE_LIMIT)
+
+        def keep(result: Any) -> None:
+            self._cache[thread_id] = result[1]
+
+        self.fetch(work, keep, group="prefetch", exclusive=False)
 
     def open_conversation(self, index: int) -> None:
         """Open the conversation at *index*."""
@@ -371,22 +397,34 @@ class ChatPanel(PanelBase):
             return
         record = self.conversations[index]
         self.current = record
+        self.current_thread = None
         self.query_one("#chat-title", Static).update(
             Text(record.get("title") or (record.get("usernames") or [""])[0])
         )
         self.query_one("#message-list", VerticalScroll).remove_children()
+        cached = self._cache.get(record["id"])
+        if cached is not None:
+            self._apply_thread((self.current_thread, cached))
+
         self.set_status("Loading messages…")
         self.fetch(
-            lambda: api.read_messages(
-                self.client,
-                self._thread_for(record),
-                limit=MESSAGE_LIMIT,
+            lambda: api.read_conversation(
+                self.client, record["id"], limit=MESSAGE_LIMIT
             ),
-            self._apply_messages,
+            self._apply_thread,
         )
 
     def _thread_for(self, record: dict[str, Any]) -> Any:
+        """Return the open thread, without asking Instagram for it again."""
+        if self.current_thread is not None:
+            return self.current_thread
         return api.get_thread(self.client, record["id"])
+
+    def _apply_thread(self, result: tuple[Any, list[dict[str, Any]]]) -> None:
+        self.current_thread, records = result
+        if self.current is not None:
+            self._cache[self.current["id"]] = records
+        self._apply_messages(records)
 
     def _apply_messages(self, records: list[dict[str, Any]]) -> None:
         self.messages = records or []
@@ -568,6 +606,11 @@ class ChatPanel(PanelBase):
             lambda: api.unsend(self.client, self._thread_for(self.current), record["id"]),
             lambda _: self._remove_bubble(record["id"]),
         )
+
+    def on_text_area_changed(self, event: Any) -> None:
+        """Notice when the user is writing, so a refresh stays out of the way."""
+        if getattr(event, "text_area", None) is not None and event.text_area.id == "composer-input":
+            self.typing = bool(event.text_area.text.strip())
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Filter the conversation list as the user types."""

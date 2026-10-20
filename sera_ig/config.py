@@ -48,6 +48,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "avatar_images": False,
         "image_protocol": "auto",
         "animations": True,
+        "prefetch": False,
         "confirm_send": False,
     },
     "keybinds": {},

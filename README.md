@@ -180,6 +180,12 @@ usable from the keyboard alone.
 The interface is drawn immediately and keeps a spinner going while Instagram
 answers, so it never shows a blank screen — even on a slow connection.
 
+Every action costs as few round trips as possible: listing the inbox is one
+request, opening a conversation is one request (it brings the messages with
+it), and sending a message is one request. Set
+`advanced.request_delay` to `0` to drop the one-second pause instagrapi takes
+before each request.
+
 ### The classic prompt
 
 `seraig shell` opens a prompt where every command is available without
@@ -379,7 +385,7 @@ Set `SERA_IG_HOME` to move the whole thing somewhere else.
 | `login.totp_secret` | – | Authenticator seed, so 2FA needs no input |
 | `chat.page_size` | 20 | Messages fetched per thread |
 | `output.format` | `text` | `text` or `json` |
-| `advanced.request_delay` | 1 | Seconds to wait between requests (instagrapi's anti-detection pause — **0 is fastest**) |
+| `advanced.request_delay` | 1 | Seconds to wait before each request (instagrapi's anti-detection pause — **0 is fastest**) |
 | `advanced.debug` | `false` | Write debug logs to `logs/` |
 
 ## JSON output — built for agents

@@ -210,6 +210,13 @@ class FakeClient:
         )
 
     # --------------------------------------------------------------- direct
+    @staticmethod
+    def _limited(thread: DirectThread, limit: int | None) -> DirectThread:
+        """Return a copy of *thread* with at most *limit* messages."""
+        if limit is None:
+            return thread
+        return thread.model_copy(update={"messages": list(thread.messages[-limit:])})
+
     def direct_threads(
         self,
         amount: int = 20,
@@ -217,16 +224,32 @@ class FakeClient:
         box: Any = None,
         thread_message_limit: int | None = None,
     ) -> list[DirectThread]:
-        threads = list(self.threads[:amount])
-        if thread_message_limit is not None:
-            for thread in threads:
-                thread.messages = thread.messages[-thread_message_limit:]
-        return threads
+        return [
+            self._limited(thread, thread_message_limit)
+            for thread in self.threads[:amount]
+        ]
 
-    def direct_thread(self, thread_id: int, amount: int = 20) -> DirectThread:
+    def direct_threads_chunk(
+        self,
+        selected_filter: Any = None,
+        box: Any = None,
+        thread_message_limit: int | None = None,
+        cursor: str | None = None,
+    ) -> tuple[list[DirectThread], str | None]:
+        """One page of the inbox, and the cursor for the next one."""
+        if cursor is not None:
+            return [], None
+        threads = [self._limited(thread, thread_message_limit) for thread in self.threads]
+        return threads, None
+
+    def direct_thread(
+        self,
+        thread_id: int,
+        amount: int = 20,
+    ) -> DirectThread:
         for thread in self.threads:
             if str(thread.id) == str(thread_id):
-                return thread
+                return self._limited(thread, amount or None)
         raise ValueError("thread not found")
 
     def direct_messages(self, thread_id: int, amount: int = 20) -> list[DirectMessage]:
@@ -234,7 +257,9 @@ class FakeClient:
         return list(thread.messages)[:amount]
 
     def direct_message(self, thread_id: int, message_id: int, amount: int = 20) -> DirectMessage:
-        for message in self.direct_messages(thread_id, amount=50):
+        # instagrapi reaches the thread first, then looks the message up.
+        thread = self.direct_thread(thread_id, amount=amount)
+        for message in thread.messages:
             if str(message.id) == str(message_id):
                 return message
         raise ValueError("message not found")

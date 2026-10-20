@@ -24,7 +24,10 @@ from .models import (
     thread_to_dict,
     user_to_dict,
 )
-from .resolve import resolve_thread
+from .resolve import looks_like_thread_id, resolve_thread
+
+#: How many messages are fetched when a reply has to find its target.
+REPLY_LOOKUP_LIMIT = 20
 
 # --------------------------------------------------------------------- threads
 
@@ -69,6 +72,24 @@ def get_thread(client: Any, reference: str, *, create: bool = False) -> DirectTh
     return resolve_thread(client, reference, create=create)
 
 
+def open_thread(
+    client: Any,
+    thread_id: str | int,
+    *,
+    message_limit: int = 50,
+) -> tuple[DirectThread, list[dict[str, Any]]]:
+    """Fetch a thread **and** its messages in a single request.
+
+    ``direct_thread`` returns the conversation together with its most recent
+    messages, so opening a conversation costs one round trip instead of
+    listing the whole inbox and then asking for the thread again.
+    """
+    thread = client.direct_thread(int(thread_id), amount=message_limit)
+    records = [message_to_dict(message) for message in thread.messages]
+    records.sort(key=lambda item: item.get("timestamp") or "")
+    return thread, records
+
+
 def read_messages(client: Any, thread: DirectThread, *, limit: int = 20) -> list[dict[str, Any]]:
     """Return the last *limit* messages of *thread* as normalised dicts.
 
@@ -82,6 +103,24 @@ def read_messages(client: Any, thread: DirectThread, *, limit: int = 20) -> list
     return records
 
 
+def read_conversation(
+    client: Any,
+    reference: str,
+    *,
+    limit: int = 50,
+    create: bool = False,
+) -> tuple[DirectThread, list[dict[str, Any]]]:
+    """Fetch a conversation and its messages in as few requests as possible.
+
+    A thread id is fetched straight away, with its messages in the same round
+    trip. A name has to be looked up first, which costs one more request.
+    """
+    if looks_like_thread_id(reference):
+        return open_thread(client, reference, message_limit=limit)
+    thread = get_thread(client, reference, create=create)
+    return thread, read_messages(client, thread, limit=limit)
+
+
 def send_text(
     client: Any,
     thread: DirectThread,
@@ -93,7 +132,11 @@ def send_text(
     reply_message = None
     if reply_to:
         try:
-            reply_message = client.direct_message(int(thread.id), int(reply_to["id"]), amount=1)
+            # The message has to be among the ones the endpoint returns, so
+            # ask for a page of them rather than only the newest.
+            reply_message = client.direct_message(
+                int(thread.id), int(reply_to["id"]), amount=REPLY_LOOKUP_LIMIT
+            )
         except Exception as exc:
             raise NotFoundError(
                 f"Message {reply_to.get('id')} was not found in this thread."

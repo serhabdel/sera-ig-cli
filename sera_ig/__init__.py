@@ -12,6 +12,6 @@ from importlib.metadata import version as _version
 try:
     __version__ = _version("sera-ig-cli")
 except PackageNotFoundError:  # pragma: no cover - running from a source tree
-    __version__ = "0.3.0"
+    __version__ = "0.3.1"
 
 __all__ = ["__version__"]

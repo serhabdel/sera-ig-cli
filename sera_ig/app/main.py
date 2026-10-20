@@ -24,6 +24,9 @@ from .stories import StoriesPanel
 from .themes import available_themes, resolve_theme, user_themes
 from .worker import PanelBase
 
+#: How often the visible screen reloads itself, in seconds.
+REFRESH_SECONDS = 60
+
 #: The panels, in tab order.
 PANELS = {
     "chats": ("Chats", ChatPanel),
@@ -97,6 +100,11 @@ class SeraApp(App):
         return bool(self.config.get("ui.show_previews", True))
 
     @property
+    def prefetch(self) -> bool:
+        """Whether the first conversation is fetched in the background."""
+        return bool(self.config.get("ui.prefetch", False))
+
+    @property
     def animations(self) -> bool:
         """Whether the interface animates."""
         return bool(self.config.get("ui.animations", True))
@@ -124,10 +132,47 @@ class SeraApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        """Apply the configured theme."""
+        """Apply the configured theme and load the first screen."""
         wanted = str(self.config.get("ui.theme", "textual-dark"))
         if resolve_theme(wanted, self.config) is not None:
             self.theme = wanted
+        self.call_after_refresh(self._load_active_panel)
+        self.set_interval(REFRESH_SECONDS, self._auto_refresh)
+
+    def _auto_refresh(self) -> None:
+        """Reload the visible screen now and then.
+
+        It never runs while the user is typing, and it only refreshes a
+        panel that has already been loaded.
+        """
+        panel = self._active_panel()
+        if panel is None or not getattr(panel, "loaded", False):
+            return
+        if getattr(panel, "typing", False):
+            return
+        panel.reload()
+
+    # -------------------------------------------------------------- panels
+    def _panel_for(self, screen: str | None) -> Any:
+        """Return the panel shown on *screen*."""
+        entry = PANELS.get(screen or "")
+        if entry is None:
+            return None
+        for panel in self.query(entry[1]):
+            return panel
+        return None
+
+    def _load_active_panel(self) -> None:
+        """Load the panel of the tab that is showing."""
+        panel = self._active_panel()
+        if panel is not None and hasattr(panel, "loaded") and not panel.loaded:
+            panel.reload()
+
+    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        """Load a panel the first time its tab is opened."""
+        panel = self._panel_for(event.tab.id)
+        if panel is not None and hasattr(panel, "loaded") and not panel.loaded:
+            panel.reload()
 
     # -------------------------------------------------------------- themes
     def set_theme(self, name: str) -> None:

@@ -60,52 +60,106 @@ def resolve_thread(
     """Resolve *reference* to a :class:`DirectThread`.
 
     Raises :class:`NotFoundError` when nothing matches and *create* is false.
+
+    The number of requests matters here: a thread id is fetched directly with
+    one request, and a name is looked up by paging through the inbox and
+    stopping at the first page that matches.
     """
     reference = (reference or "").strip()
     if not reference:
         raise UsageError("No thread reference given.")
 
-    if threads is None:
-        threads = client.direct_threads(amount=50)
-
-    # 1. Exact thread id -------------------------------------------------
+    # 1. A thread id: fetch exactly that thread, in one request.
     if looks_like_thread_id(reference):
-        for thread in threads:
-            if str(thread.id) == reference or str(thread.pk) == reference:
-                return thread
         try:
             return client.direct_thread(int(reference), amount=1)
         except Exception as exc:
             raise NotFoundError(f"No thread with id {reference}.") from exc
 
-    # 2. Exact username ---------------------------------------------------
-    wanted = _norm(reference)
-    exact: list[DirectThread] = []
-    for thread in threads:
-        if any(_norm(username) == wanted for username in thread_usernames(thread)):
-            exact.append(thread)
-    if len(exact) == 1:
-        return exact[0]
-    if len(exact) > 1:
-        # Prefer the most recently active thread for that user.
-        exact.sort(key=lambda t: t.last_activity_at or 0, reverse=True)
-        return exact[0]
+    # 2. A name: page through the inbox until it matches.
+    if threads is None:
+        found, seen = _search_inbox(client, reference)
+    else:
+        found = _match(threads, reference)
+        seen = threads
 
-    # 3. Fuzzy match on usernames and titles -----------------------------
-    fuzzy = _fuzzy_match(reference, threads)
-    if fuzzy is not None:
-        return fuzzy
+    if found is not None:
+        return found
 
-    # 4. New thread for an existing user ---------------------------------
+    # 3. A new thread for an existing user.
     if create:
-        return _create_thread(client, wanted)
+        return _create_thread(client, _norm(reference))
 
-    suggestions = _suggest(reference, threads)
+    suggestions = _suggest(reference, seen)
     hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
     raise NotFoundError(
         f"No thread matching '{reference}'.{hint} "
         "Pass a thread id, a username, or use `seraig search <name>` to find a user."
     )
+
+
+def _match(threads: list[DirectThread], reference: str) -> DirectThread | None:
+    """Find the thread matching *reference* in a list of threads."""
+    wanted = _norm(reference)
+
+    # An exact username wins.
+    exact = [
+        thread
+        for thread in threads
+        if any(_norm(username) == wanted for username in thread_usernames(thread))
+    ]
+    if exact:
+        # Prefer the most recently active thread for that user.
+        exact.sort(key=lambda thread: thread.last_activity_at or 0, reverse=True)
+        return exact[0]
+
+    # Then a fuzzy match on the usernames and the titles.
+    return _fuzzy_match(reference, threads)
+
+
+def _search_inbox(client: Any, reference: str) -> tuple[DirectThread | None, list[DirectThread]]:
+    """Page through the inbox until *reference* matches.
+
+    Only one page is fetched when the conversation is in the first page, which
+    is the usual case. An exact username match keeps priority over a fuzzy
+    one, so the pages are scanned until it is found or the inbox runs out.
+    """
+    seen: list[DirectThread] = []
+    fuzzy: DirectThread | None = None
+    cursor: str | None = None
+
+    while True:
+        try:
+            chunk, cursor = client.direct_threads_chunk(None, None, 1, cursor)
+        except Exception:
+            break
+        if not chunk:
+            break
+        seen.extend(chunk)
+
+        exact = _exact_username(reference, chunk)
+        if exact is not None:
+            return exact, seen
+        if fuzzy is None:
+            fuzzy = _fuzzy_match(reference, chunk)
+        if not cursor:
+            break
+
+    return fuzzy, seen
+
+
+def _exact_username(reference: str, threads: list[DirectThread]) -> DirectThread | None:
+    """Return the thread of the user named exactly *reference*."""
+    wanted = _norm(reference)
+    exact = [
+        thread
+        for thread in threads
+        if any(_norm(username) == wanted for username in thread_usernames(thread))
+    ]
+    if not exact:
+        return None
+    exact.sort(key=lambda thread: thread.last_activity_at or 0, reverse=True)
+    return exact[0]
 
 
 def _fuzzy_match(reference: str, threads: list[DirectThread]) -> DirectThread | None:

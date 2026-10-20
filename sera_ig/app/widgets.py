@@ -182,6 +182,7 @@ class RecordPanel(PanelBase):
         super().__init__(**kwargs)
         self.client = client
         self.records: list[dict[str, Any]] = []
+        self.loaded = False
 
     # ------------------------------------------------------------- to fill
     def fetch_records(self) -> list[dict[str, Any]]:
@@ -205,6 +206,7 @@ class RecordPanel(PanelBase):
     def apply_records(self, records: list[dict[str, Any]]) -> None:
         """Show the fetched records."""
         self.records = records or []
+        self.loaded = True
         listing = self.query_one(".record-list")
         listing.remove_children()
         for index, record in enumerate(self.records):

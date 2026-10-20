@@ -99,8 +99,7 @@ def read(
     """Read the messages of a conversation."""
     fmt = resolve_output(output)
     with client_module.connect(resolve_account(account)) as client:
-        target = api.get_thread(client, thread)
-        records = api.read_messages(client, target, limit=limit)
+        target, records = api.read_conversation(client, thread, limit=limit)
         if mark_seen:
             api.mark_seen(client, target)
     payload = {"thread": thread_to_dict(target), "messages": records}
