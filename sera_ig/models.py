@@ -72,6 +72,7 @@ def thread_to_dict(thread: DirectThread, *, last_message: DirectMessage | None =
         "is_group": bool(thread.is_group),
         "pending": bool(thread.pending),
         "muted": bool(thread.muted),
+        "unread": thread.read_state == 0,
         "users": users,
         "usernames": usernames,
         "last_activity_at": _iso(thread.last_activity_at),
@@ -153,15 +154,27 @@ def message_to_dict(message: DirectMessage | None) -> dict[str, Any]:
         text = text or "[visual media]"
 
     reactions = []
-    if message.reactions and message.reactions.emojis:
+    likes_count = 0
+    if message.reactions:
+        likes_count = message.reactions.likes_count or 0
         for reaction in message.reactions.emojis:
             reactions.append(
                 {
                     "emoji": reaction.emoji,
                     "sender_id": str(reaction.sender_id),
                     "timestamp": _iso(reaction.timestamp),
+                    "super": reaction.super_react_type != "none",
                 }
             )
+
+    # The message this one replies to, when there is one.
+    reply_to = None
+    if message.reply is not None:
+        reply_to = {
+            "id": str(message.reply.id),
+            "text": (message.reply.text or "")[:200],
+            "is_sent_by_viewer": bool(message.reply.is_sent_by_viewer),
+        }
 
     return {
         "id": str(message.id),
@@ -175,6 +188,8 @@ def message_to_dict(message: DirectMessage | None) -> dict[str, Any]:
         "media_pk": media_pk,
         "media_url": media_url,
         "reactions": reactions,
+        "likes_count": likes_count,
+        "reply_to": reply_to,
     }
 
 

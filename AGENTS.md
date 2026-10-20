@@ -34,6 +34,8 @@ sera_ig/
 │   ├── chat.py   # conversations, messages, the composer
 │   ├── feed.py   # stories.py    notify.py   settings.py
 │   ├── widgets.py  # avatars, rows, bubbles, record panels
+│   ├── search.py   # the message search overlay
+│   ├── menu.py     # the action menu and the prompt
 │   ├── palette.py  # the command palette provider
 │   ├── themes.py   # built-in themes + user theme files
 │   ├── images.py   # protocol detection, avatars, thumbnails
@@ -118,6 +120,12 @@ seraig --help          # smoke test the CLI
   widget, set `align-horizontal: right` on it.
 - A `Static` inside a `ListItem` must not stop the click event, or the
   `ListView` never selects it.
+- **Removing and mounting widgets are deferred.** Always `await` them, and
+  make the callback a coroutine — `App.call_from_thread` awaits a coroutine
+  for you. Skipping the wait leaves two widgets with the same id and the
+  application crashes with `DuplicateIds`.
+- A widget's classes must be set when it is constructed, in the `classes`
+  argument. Setting them afterwards does not reach the stylesheet.
 
 ## Security considerations
 

@@ -80,6 +80,11 @@ class SeraProvider(Provider):
             ("Stories", "Open the stories", self._goto("stories")),
             ("Notifications", "Open the activity feed", self._goto("notifications")),
             ("Settings", "Open the settings", self._goto("settings")),
+            (
+                "Search messages",
+                "Search every message you have received",
+                self.app.search_messages,
+            ),
             ("Change theme", "Switch to the next theme", self._cycle_theme),
             ("Toggle avatars", "Show or hide the avatars", self._toggle_avatars),
             ("Refresh", "Reload what is on screen", self._refresh),

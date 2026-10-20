@@ -563,3 +563,147 @@ def download_media(client: Any, reference: str, destination: Path | None = None)
         saved.replace(destination)
         saved = destination
     return saved
+
+
+# ------------------------------------------------------------------ searching
+
+
+def search_messages(client: Any, query: str) -> list[dict[str, Any]]:
+    """Search every conversation for *query*.
+
+    This is Instagram's own message search, and it reaches the messages of
+    conversations that are not in the inbox any more.
+    """
+    query = (query or "").strip()
+    if not query:
+        return []
+
+    records: list[dict[str, Any]] = []
+    try:
+        results = client.direct_message_search(query)
+    except Exception as exc:
+        raise NotFoundError(f"The search could not be run: {exc}") from exc
+
+    for message, thread in results or []:
+        record = message_to_dict(message)
+        record["conversation"] = {
+            "id": str(thread.id),
+            "title": thread.thread_title
+            or " ".join(user.username for user in thread.users if user.username),
+            "usernames": [user.username for user in thread.users if user.username],
+        }
+        records.append(record)
+    return records
+
+
+# ------------------------------------------------------------------- presence
+
+
+def users_presence(client: Any, user_ids: list[str]) -> dict[str, bool]:
+    """Return which of *user_ids* are active right now.
+
+    Instagram answers with a mapping of user id to a presence record; only
+    the ones that are active are of interest.
+    """
+    wanted = [str(uid) for uid in user_ids if uid]
+    if not wanted:
+        return {}
+
+    try:
+        result = client.direct_users_presence([int(uid) for uid in wanted])
+    except Exception:
+        return {}
+
+    active: dict[str, bool] = {}
+    if not isinstance(result, dict):
+        return active
+
+    # The shape varies; look for the user id under a few plausible keys.
+    for key, value in result.items():
+        if not isinstance(value, dict):
+            continue
+        user = value.get("user") or value
+        pk = user.get("pk") or user.get("id") or key
+        if pk is None:
+            continue
+        is_active = bool(
+            value.get("is_active")
+            or user.get("is_active")
+            or value.get("presence_status") == "active"
+        )
+        active[str(pk)] = is_active
+    return active
+
+
+# ------------------------------------------------------------- message requests
+
+
+def pending_requests(client: Any, amount: int = 20) -> list[dict[str, Any]]:
+    """Return the conversations waiting to be accepted."""
+    try:
+        threads = client.direct_pending_inbox(amount=amount)
+    except Exception:
+        return []
+    records = [thread_to_dict(thread) for thread in threads or []]
+    records.sort(key=lambda item: item.get("last_activity_at") or "", reverse=True)
+    return records
+
+
+# ------------------------------------------------------------------- actions
+
+
+def mark_message_seen(client: Any, thread_id: str | int, message_id: str) -> bool:
+    """Mark one message as seen."""
+    try:
+        return bool(client.direct_message_seen(int(thread_id), int(message_id)))
+    except Exception:
+        return False
+
+
+def like_message(client: Any, thread_id: str | int, message_id: str) -> bool:
+    """Put a heart on a message."""
+    try:
+        return bool(client.direct_message_like(int(thread_id), int(message_id)))
+    except Exception:
+        return False
+
+
+def mute_thread(client: Any, thread_id: str | int, *, revert: bool = False) -> bool:
+    """Mute a conversation, or unmute it."""
+    try:
+        return bool(client.direct_thread_mute(int(thread_id), revert=revert))
+    except Exception:
+        return False
+
+
+def mark_thread_unread(client: Any, thread_id: str | int) -> bool:
+    """Mark a conversation as unread."""
+    try:
+        return bool(client.direct_thread_mark_unread(int(thread_id)))
+    except Exception:
+        return False
+
+
+def rename_thread(client: Any, thread_id: str | int, title: str) -> bool:
+    """Give a group conversation a new name."""
+    try:
+        return bool(client.direct_thread_update_title(int(thread_id), title))
+    except Exception:
+        return False
+
+
+def add_to_thread(client: Any, thread_id: str | int, usernames: list[str]) -> bool:
+    """Add people to a group conversation."""
+    if not usernames:
+        return False
+    try:
+        user_ids = [int(client.user_info_by_username(name).pk) for name in usernames]
+        return bool(client.direct_thread_add_users(int(thread_id), user_ids))
+    except Exception:
+        return False
+
+
+def share_photo(client: Any, thread_id: str | int, path: Any) -> dict[str, Any]:
+    """Send a photo into a conversation."""
+    message = client.direct_send_photo(path, thread_ids=[int(thread_id)])
+    return message_to_dict(message)

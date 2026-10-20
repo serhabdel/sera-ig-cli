@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.events import MouseDown
 from textual.widgets import Button, Input, Label, ListItem, ListView, Static, TextArea
 
 from .. import api
@@ -18,6 +20,46 @@ from .worker import PanelBase
 
 CONVERSATION_LIMIT = 20
 MESSAGE_LIMIT = 50
+#: Two messages from the same person within this many seconds are one group.
+GROUP_WINDOW = 300
+
+
+def _parse_time(value: Any) -> datetime | None:
+    """Parse an ISO timestamp into a datetime."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def group_flags(records: list[dict[str, Any]]) -> list[bool]:
+    """Say which messages start a new group.
+
+    Consecutive messages from the same person, close together in time, are
+    shown as one block — the way a chat app groups them.
+    """
+    flags: list[bool] = []
+    previous: dict[str, Any] | None = None
+    previous_time: datetime | None = None
+
+    for record in records:
+        current_time = _parse_time(record.get("timestamp"))
+        same_person = (
+            previous is not None
+            and previous.get("is_sent_by_viewer") == record.get("is_sent_by_viewer")
+            and previous.get("user_id") == record.get("user_id")
+        )
+        close_in_time = (
+            current_time is not None
+            and previous_time is not None
+            and abs((current_time - previous_time).total_seconds()) <= GROUP_WINDOW
+        )
+        flags.append(not (same_person and close_in_time))
+        previous = record
+        previous_time = current_time
+    return flags
 
 
 class ConversationRow(Clickable):
@@ -29,12 +71,14 @@ class ConversationRow(Clickable):
         *,
         show_avatar: bool = True,
         client: Any = None,
+        active: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self.record = record
         self.show_avatar = show_avatar
         self.client = client
+        self.active = active
 
     def compose(self) -> ComposeResult:
         user = (self.record.get("users") or [{}])[0]
@@ -42,6 +86,7 @@ class ConversationRow(Clickable):
         last = self.record.get("last_message") or {}
         preview = (last.get("text") or f"[{last.get('kind', 'message')}]").replace("\n", " ")
         when = relative_time(self.record.get("last_activity_at"))
+        unread = bool(last.get("text")) and self.record.get("unread", False)
 
         with Horizontal(classes="conversation-row"):
             yield Avatar(
@@ -52,9 +97,82 @@ class ConversationRow(Clickable):
                 classes="row-avatar",
             )
             with Vertical(classes="conversation-text"):
-                yield Label(Text(self.record.get("title") or username), classes="row-title")
+                title = Text(self.record.get("title") or username)
+                if unread:
+                    title.stylize("bold")
+                if self.active:
+                    title.append(" ●", style="green")
+                yield Label(title, classes="row-title")
                 yield Label(Text(preview[:60]), classes="row-preview")
             yield Label(Text(when), classes="row-time")
+
+    def on_double_click(self, event: Any) -> None:
+        event.stop()
+        self.post_message(self.DoublePressed(self))
+
+
+class MessageBubble(Clickable):
+    """One message in the conversation."""
+
+    def __init__(
+        self,
+        record: dict[str, Any],
+        *,
+        client: Any = None,
+        protocol: str = "halfblock",
+        selected: bool = False,
+        grouped: bool = True,
+        seen: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        self.client = client
+        self.protocol = protocol
+        self.grouped = grouped
+        self.seen = seen
+        mine = bool(record.get("is_sent_by_viewer"))
+        classes = str(kwargs.pop("classes", "") or "")
+        classes = f"{classes} message-bubble {'own' if mine else 'theirs'}"
+        if not grouped:
+            classes += " grouped"
+        super().__init__(classes=classes, **kwargs)
+        self.record = record
+        self.selected = selected
+
+    def compose(self) -> ComposeResult:
+        record = self.record
+        stamp = format_time(record.get("timestamp"))
+        body = record.get("text") or ""
+        media = record.get("media")
+
+        with Vertical(classes="bubble"):
+            reply = record.get("reply_to")
+            if reply and reply.get("text"):
+                yield Label(
+                    Text(f"↳ {reply['text'][:60]}", style="italic dim"),
+                    classes="message-reply",
+                )
+            if self.grouped and stamp:
+                yield Label(Text(stamp, style="dim"), classes="message-time")
+            if body:
+                yield Label(Text(body), classes="message-text")
+            if media and (media.get("url") or media.get("pk")):
+                yield MediaPreview(self.client, media, self.protocol, classes="message-media")
+            elif media:
+                yield Label(Text(f"[{media.get('type', 'media')}]"), classes="message-media")
+
+            reactions = record.get("reactions") or []
+            if reactions:
+                emojis = "".join(r["emoji"] for r in reactions)
+                yield Label(Text(f"{emojis} {record.get('likes_count', 0)}"), classes="message-reactions")
+            elif record.get("likes_count"):
+                yield Label(Text(f"♥ {record['likes_count']}"), classes="message-reactions")
+
+            if self.seen:
+                yield Label(Text("Seen", style="dim"), classes="message-seen")
+
+    def on_click(self, event: Any) -> None:
+        event.stop()
+        self.post_message(self.Pressed(self))
 
     def on_double_click(self, event: Any) -> None:
         event.stop()
@@ -74,9 +192,6 @@ class MediaPreview(Static):
         height: auto;
         width: 100%;
     }
-    .media-placeholder {
-        color: $text-muted;
-    }
     """
 
     def __init__(self, client: Any, media: dict[str, Any], protocol: str, **kwargs: Any) -> None:
@@ -91,10 +206,7 @@ class MediaPreview(Static):
     def load_media(self) -> None:
         """Fetch and draw the picture."""
         url = self.media.get("url")
-        if not url:
-            self.show_placeholder()
-            return
-        if not supports_images(self.protocol):
+        if not url or not supports_images(self.protocol):
             self.show_placeholder()
             return
 
@@ -103,10 +215,6 @@ class MediaPreview(Static):
             response.raise_for_status()
             return response.content
 
-        self.run_worker(self._draw, work)
-
-    def _draw(self, work: Any) -> None:
-        """Run the download on a worker thread, then draw the result."""
         from .worker import run
 
         run(
@@ -137,52 +245,6 @@ class MediaPreview(Static):
             self.update(Text(f"[{kind}]", style="dim"))
 
 
-class MessageBubble(Clickable):
-    """One message in the conversation."""
-
-    def __init__(
-        self,
-        record: dict[str, Any],
-        *,
-        client: Any = None,
-        protocol: str = "halfblock",
-        selected: bool = False,
-        **kwargs: Any,
-    ) -> None:
-        self.client = client
-        self.protocol = protocol
-        mine = bool(record.get("is_sent_by_viewer"))
-        classes = str(kwargs.pop("classes", "") or "")
-        classes = f"{classes} message-bubble {'own' if mine else 'theirs'}"
-        if selected:
-            classes += " selected"
-        super().__init__(classes=classes, **kwargs)
-        self.record = record
-        self.selected = selected
-
-    def compose(self) -> ComposeResult:
-        record = self.record
-        stamp = format_time(record.get("timestamp"))
-        body = record.get("text") or ""
-        media = record.get("media")
-
-        with Vertical(classes="bubble"):
-            yield Label(Text(stamp, style="dim"), classes="message-time")
-            yield Label(Text(body), classes="message-text")
-            if media and (media.get("url") or media.get("pk")):
-                yield MediaPreview(self.client, media, self.protocol, classes="message-media")
-            elif media:
-                yield Label(Text(f"[{media.get('type', 'media')}]"), classes="message-media")
-
-    def on_click(self, event: Any) -> None:
-        event.stop()
-        self.post_message(self.Pressed(self))
-
-    def on_double_click(self, event: Any) -> None:
-        event.stop()
-        self.post_message(self.DoublePressed(self))
-
-
 class ChatPanel(PanelBase):
     """Conversations on the left, the open conversation on the right."""
 
@@ -197,9 +259,13 @@ class ChatPanel(PanelBase):
     #chat-filter {
         margin: 0 0 1 0;
     }
+    #chat-filter:focus {
+        border: tall $accent;
+    }
     #conversation-list {
         height: 1fr;
         background: $surface;
+        scrollbar-size-vertical: 1;
     }
     #conversation-list > ListItem {
         background: $surface;
@@ -224,7 +290,7 @@ class ChatPanel(PanelBase):
         width: 1fr;
     }
     .row-title {
-        text-style: bold;
+        text-style: none;
     }
     .row-preview, .row-time {
         color: $text-muted;
@@ -245,30 +311,39 @@ class ChatPanel(PanelBase):
     #message-list {
         height: 1fr;
         padding: 1 2;
+        scrollbar-size-vertical: 1;
     }
     .message-bubble {
         height: auto;
         width: 100%;
         margin: 0 0 1 0;
     }
+    .message-bubble.grouped {
+        margin: 0 0 0 0;
+    }
     .message-bubble > .bubble {
-        width: 70%;
+        width: 66%;
         height: auto;
         padding: 0 1;
-        border-left: solid $secondary;
+        border-top: round $secondary;
+        border-bottom: round $secondary;
+        border-left: round $secondary;
     }
     .message-bubble.own {
         align-horizontal: right;
     }
     .message-bubble.own > .bubble {
         border-left: none;
-        border-right: solid $accent;
+        border-right: round $accent;
     }
     .message-bubble.selected > .bubble {
         background: $panel;
     }
-    .message-time {
+    .message-time, .message-reply, .message-seen {
         color: $text-muted;
+    }
+    .message-reactions {
+        color: $accent;
     }
     #action-bar {
         height: auto;
@@ -283,9 +358,15 @@ class ChatPanel(PanelBase):
     #composer-input {
         width: 1fr;
     }
+    #composer-input:focus {
+        border: tall $accent;
+    }
     #send {
         width: 12;
         min-width: 12;
+    }
+    #send:disabled {
+        opacity: 50%;
     }
     #chat-status {
         height: 1;
@@ -300,6 +381,7 @@ class ChatPanel(PanelBase):
     BINDINGS = [
         Binding("ctrl+enter", "send_message", "Send", priority=True),
         Binding("ctrl+f", "focus_filter", "Filter"),
+        Binding("ctrl+s", "search_messages", "Search"),
         Binding("ctrl+r", "refresh_list", "Refresh"),
     ]
 
@@ -310,11 +392,14 @@ class ChatPanel(PanelBase):
         self.messages: list[dict[str, Any]] = []
         self.current: dict[str, Any] | None = None
         self.current_thread: Any = None
+        self.selected_message: str | None = None
         self.loaded = False
         self.typing = False
         self._cache: dict[str, list[dict[str, Any]]] = {}
         self._pending_bubble: MessageBubble | None = None
-        self.selected_message: str | None = None
+        self._seen: set[str] = set()
+        self._presence: dict[str, bool] = {}
+        self._requests = 0
         self._filter_timer: Any = None
 
     # ------------------------------------------------------------- layout
@@ -329,11 +414,12 @@ class ChatPanel(PanelBase):
             with Horizontal(id="action-bar"):
                 yield Button("Reply", id="act-reply", variant="primary")
                 yield Button("React", id="act-react")
+                yield Button("Like", id="act-like")
                 yield Button("Unsend", id="act-unsend")
                 yield Button("Copy", id="act-copy")
             with Horizontal(id="composer"):
                 yield TextArea(id="composer-input")
-                yield Button("Send", id="send", variant="primary")
+                yield Button("Send", id="send", variant="primary", disabled=True)
 
     def on_mount(self) -> None:
         self.load_conversations()
@@ -369,34 +455,48 @@ class ChatPanel(PanelBase):
                 record,
                 show_avatar=show_avatar,
                 client=self.client,
+                active=self._presence.get(
+                    str((record.get("users") or [{}])[0].get("pk") or ""), False
+                ),
                 id=f"conversation-{index}",
             )
             await listing.append(ListItem(row, id=f"conversation-item-{index}"))
         if not self.conversations:
-            self.set_status("No conversations")
+            self.set_status("No conversations yet — press ^S to search your messages")
         else:
             self.set_status(f"{len(self.conversations)} conversations")
-            self._prefetch_first()
+        self._load_presence()
 
-    def _prefetch_first(self) -> None:
-        """Warm the first conversation, so the first click is instant.
-
-        It is off by default: it costs a request that is wasted when the
-        first conversation is never opened.
-        """
-        if self._cache or not self.conversations:
+    def _load_presence(self) -> None:
+        """Find out who is active right now."""
+        user_ids = [
+            str(user.get("pk"))
+            for record in self.conversations
+            for user in (record.get("users") or [])
+            if user.get("pk")
+        ]
+        if not user_ids:
             return
-        if not self.app.prefetch:
-            return
-        thread_id = self.conversations[0]["id"]
 
         def work() -> Any:
-            return api.read_conversation(self.client, thread_id, limit=MESSAGE_LIMIT)
+            return api.users_presence(self.client, user_ids)
 
-        def keep(result: Any) -> None:
-            self._cache[thread_id] = result[1]
+        def apply(active: dict[str, bool]) -> None:
+            self._presence = active or {}
+            for record in self.conversations:
+                pk = str((record.get("users") or [{}])[0].get("pk") or "")
+                record["active"] = self._presence.get(pk, False)
+            self.app.call_later(self._refresh_rows)
 
-        self.fetch(work, keep, group="prefetch", exclusive=False)
+        self.fetch(work, apply, group="presence", exclusive=False)
+
+    async def _refresh_rows(self) -> None:
+        """Redraw the conversation list after the presence arrives."""
+        listing = self.query_one("#conversation-list", ListView)
+        for index, record in enumerate(self.conversations):
+            pk = str((record.get("users") or [{}])[0].get("pk") or "")
+            row = listing.query_one(f"#conversation-{index}", ConversationRow)
+            row.active = self._presence.get(pk, False)
 
     def open_conversation(self, index: int) -> None:
         """Open the conversation at *index*."""
@@ -409,10 +509,6 @@ class ChatPanel(PanelBase):
             Text(record.get("title") or (record.get("usernames") or [""])[0])
         )
         self.query_one("#message-list", VerticalScroll).remove_children()
-        cached = self._cache.get(record["id"])
-        if cached is not None:
-            self._apply_thread((self.current_thread, cached))
-
         self.set_status("Loading messages…")
         self.fetch(
             lambda: api.read_conversation(
@@ -432,6 +528,24 @@ class ChatPanel(PanelBase):
         if self.current is not None:
             self._cache[self.current["id"]] = records
         await self._apply_messages(records)
+        self._mark_seen(records)
+        # The conversation is open, so the composer is ready for a reply.
+        self.query_one("#composer-input", TextArea).focus()
+
+    def _mark_seen(self, records: list[dict[str, Any]]) -> None:
+        """Tell Instagram the newest message has been read."""
+        if not records or self.current is None:
+            return
+        newest = records[-1]
+        message_id = newest.get("id")
+        if not message_id or message_id in self._seen:
+            return
+        self._seen.add(str(message_id))
+
+        def work() -> Any:
+            return api.mark_message_seen(self.client, self.current["id"], message_id)
+
+        self.fetch(work, lambda _: None, group="seen", exclusive=False)
 
     async def _apply_messages(self, records: list[dict[str, Any]]) -> None:
         """Show the messages of the open conversation.
@@ -442,9 +556,10 @@ class ChatPanel(PanelBase):
         self.messages = records or []
         container = self.query_one("#message-list", VerticalScroll)
         await container.remove_children()
+        flags = group_flags(self.messages)
         bubbles = []
         seen: set[str] = set()
-        for record in self.messages:
+        for record, grouped in zip(self.messages, flags, strict=True):
             key = str(record.get("id"))
             if key in seen:
                 # Instagram can repeat a message; showing it twice would
@@ -457,6 +572,8 @@ class ChatPanel(PanelBase):
                     client=self.client,
                     protocol=self.app.image_protocol,
                     selected=record["id"] == self.selected_message,
+                    grouped=grouped,
+                    seen=key in self._seen,
                     id=f"message-{key}",
                 )
             )
@@ -551,18 +668,18 @@ class ChatPanel(PanelBase):
             bubble.set_class(False, "selected")
         self.query_one("#action-bar").set_class(False, "visible")
 
+    def set_status(self, text: str, *, error: bool = False) -> None:
+        """Show a line of status under the conversation list."""
+        status = self.query_one("#chat-status", Static)
+        status.update(Text(text))
+        status.set_class(error, "error")
+
     def fail(self, exc: BaseException) -> None:
         """Report a failed call: the status line and a toast."""
         from .worker import describe_error
 
         self.set_status(describe_error(exc), error=True)
         self.app.report_error(exc)
-
-    def set_status(self, text: str, *, error: bool = False) -> None:
-        """Show a line of status under the conversation list."""
-        status = self.query_one("#chat-status", Static)
-        status.update(Text(text))
-        status.set_class(error, "error")
 
     def reload(self) -> None:
         """Reload the conversation list."""
@@ -573,6 +690,10 @@ class ChatPanel(PanelBase):
 
     def action_focus_filter(self) -> None:
         self.query_one("#chat-filter", Input).focus()
+
+    def action_search_messages(self) -> None:
+        """Search every message you have ever received."""
+        self.app.search_messages()
 
     # -------------------------------------------------------------- events
     def on_list_view_selected(self, event: ListView.Selected) -> None:
@@ -601,6 +722,8 @@ class ChatPanel(PanelBase):
             self._reply_to_selected()
         elif button == "act-react":
             self._react_to_selected()
+        elif button == "act-like":
+            self._like_selected()
         elif button == "act-unsend":
             self._unsend_selected()
         elif button == "act-copy":
@@ -634,6 +757,15 @@ class ChatPanel(PanelBase):
             lambda _: self.app.notify("Reacted ❤", title="Message"),
         )
 
+    def _like_selected(self) -> None:
+        record = self._selected_record()
+        if record is None or self.current is None:
+            return
+        self.fetch(
+            lambda: api.like_message(self.client, self.current["id"], record["id"]),
+            lambda _: self.app.notify("Liked ❤", title="Message"),
+        )
+
     def _unsend_selected(self) -> None:
         record = self._selected_record()
         if record is None or self.current is None:
@@ -643,11 +775,6 @@ class ChatPanel(PanelBase):
             lambda _: self._remove_bubble(record["id"]),
         )
 
-    def on_text_area_changed(self, event: Any) -> None:
-        """Notice when the user is writing, so a refresh stays out of the way."""
-        if getattr(event, "text_area", None) is not None and event.text_area.id == "composer-input":
-            self.typing = bool(event.text_area.text.strip())
-
     def on_input_changed(self, event: Input.Changed) -> None:
         """Filter the conversation list as the user types."""
         if event.input.id != "chat-filter":
@@ -656,3 +783,74 @@ class ChatPanel(PanelBase):
             self._filter_timer.stop()
         value = event.value.strip()
         self._filter_timer = self.set_timer(0.3, lambda: self.load_conversations(value))
+
+    def on_text_area_changed(self, event: Any) -> None:
+        """Notice when the user is writing, so a refresh stays out of the way."""
+        area = getattr(event, "text_area", None)
+        if area is None or area.id != "composer-input":
+            return
+        self.typing = bool(area.text.strip())
+        self.query_one("#send", Button).disabled = not self.typing
+
+    def on_mouse_down(self, event: MouseDown) -> None:
+        """A right click opens the actions for what is under the pointer."""
+        if event.button != 2:
+            return
+        event.stop()
+        target = event.widget
+        if isinstance(target, MessageBubble):
+            self.app.show_message_menu(self, target.record)
+        elif isinstance(target, ConversationRow):
+            self.app.show_conversation_menu(self, target.record)
+
+    # ------------------------------------------------------- menu actions
+    def run_message_action(self, key: str, record: dict[str, Any]) -> None:
+        """Do what the message menu was asked to do."""
+        if key == "reply":
+            self.selected_message = record.get("id")
+            self._reply_to_selected()
+        elif key == "react":
+            self.selected_message = record.get("id")
+            self._react_to_selected()
+        elif key == "like":
+            self.selected_message = record.get("id")
+            self._like_selected()
+        elif key == "copy":
+            self.app.copy_to_clipboard(record.get("text", ""))
+            self.app.notify("Copied", title="Message")
+        elif key == "unsend":
+            self.selected_message = record.get("id")
+            self._unsend_selected()
+
+    def run_conversation_action(self, key: str, record: dict[str, Any]) -> None:
+        """Do what the conversation menu was asked to do."""
+        thread_id = record.get("id")
+        if not thread_id:
+            return
+        if key == "open":
+            self.open_thread_by_id(thread_id)
+        elif key == "mute":
+            self.fetch(
+                lambda: api.mute_thread(self.client, thread_id),
+                lambda _: self.app.notify("Muted", title="Conversation"),
+            )
+        elif key == "unread":
+            self.fetch(
+                lambda: api.mark_thread_unread(self.client, thread_id),
+                lambda _: self.app.notify("Marked as unread", title="Conversation"),
+            )
+        elif key == "rename":
+            self.app.rename_conversation(self, record)
+
+    def open_thread_by_id(self, thread_id: str) -> None:
+        """Open a conversation by its id, even if it is not in the list."""
+        for index, record in enumerate(self.conversations):
+            if str(record.get("id")) == str(thread_id):
+                self.open_conversation(index)
+                return
+        # Not in the inbox — fetch it on its own.
+        self.set_status("Opening conversation…")
+        self.fetch(
+            lambda: api.read_conversation(self.client, thread_id, limit=MESSAGE_LIMIT),
+            self._apply_thread,
+        )

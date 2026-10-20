@@ -13,6 +13,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.widgets import Footer, Header, TabbedContent, TabPane
 
+from .. import api
 from ..config import get_config
 from .chat import ChatPanel
 from .feed import FeedPanel
@@ -256,6 +257,72 @@ class SeraApp(App):
                 target()
         except Exception as exc:  # pragma: no cover - terminal dependent
             self.report_error(exc)
+
+    # ------------------------------------------------------------- overlays
+    def search_messages(self) -> None:
+        """Open the overlay that searches every message you have received."""
+        from .search import SearchScreen
+
+        def done(thread_id: str | None) -> None:
+            if not thread_id:
+                return
+            self.goto_screen("chats")
+            panel = self._panel_for("chats")
+            if panel is not None:
+                panel.open_thread_by_id(thread_id)
+
+        self.push_screen(SearchScreen(self.client), done)
+
+    def show_message_menu(self, panel: Any, record: dict[str, Any]) -> None:
+        """Offer the things that can be done with a message."""
+        from .menu import ActionMenu
+
+        actions = [
+            ("reply", "Reply", "Reply to this message"),
+            ("react", "React ❤", "Send a heart"),
+            ("like", "Like", "Like the message"),
+            ("copy", "Copy", "Copy the text"),
+            ("unsend", "Unsend", "Delete the message"),
+        ]
+
+        def done(key: str | None) -> None:
+            if key:
+                panel.run_message_action(key, record)
+
+        self.push_screen(ActionMenu("Message", actions), done)
+
+    def show_conversation_menu(self, panel: Any, record: dict[str, Any]) -> None:
+        """Offer the things that can be done with a conversation."""
+        from .menu import ActionMenu
+
+        actions = [
+            ("mute", "Mute", "Stop the notifications"),
+            ("unread", "Mark as unread", "Put the unread dot back"),
+            ("rename", "Rename", "Give the group a new name"),
+            ("open", "Open", "Open the conversation"),
+        ]
+
+        def done(key: str | None) -> None:
+            if key:
+                panel.run_conversation_action(key, record)
+
+        self.push_screen(ActionMenu("Conversation", actions), done)
+
+    def rename_conversation(self, panel: Any, record: dict[str, Any]) -> None:
+        """Ask for a new name for a group conversation."""
+        from .menu import PromptScreen
+
+        def done(title: str | None) -> None:
+            if not title:
+                return
+            panel.fetch(
+                lambda: api.rename_thread(self.client, record["id"], title),
+                lambda _: self.app.notify(f"Renamed to '{title}'", title="Conversation"),
+            )
+
+        self.push_screen(
+            PromptScreen("New name for the conversation", record.get("title") or ""), done
+        )
 
     def action_cycle_theme(self) -> None:
         self.cycle_theme()

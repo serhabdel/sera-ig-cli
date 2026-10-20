@@ -165,6 +165,7 @@ usable from the keyboard alone.
 | Key | Action |
 | --- | --- |
 | `Ctrl+P` | Command palette — runs the CLI commands and the app actions |
+| `Ctrl+S` | Search **every** message you have ever received |
 | `Ctrl+T` | Cycle to the next theme |
 | `Ctrl+R` | Reload what is on screen |
 | `Ctrl+F` | Focus the conversation filter |
@@ -175,7 +176,12 @@ usable from the keyboard alone.
 | `Esc` | Close the overlay, or drop the selection |
 | Click | Open a conversation, or select a message |
 | Double click | Copy a message |
+| Right click | Open the actions for a conversation or a message |
 | Scroll | Scroll the list or the conversation |
+
+Opening a conversation puts the cursor straight in the composer, so you can
+type a reply without touching the mouse. Consecutive messages from the same
+person are grouped into one block, exactly like the Instagram app.
 
 The interface is drawn immediately and keeps a spinner going while Instagram
 answers, so it never shows a blank screen — even on a slow connection.
@@ -310,6 +316,22 @@ seraig tui notify         # the Notifications screen
 | **Stories** | The stories of the people you follow |
 | **Notifications** | Likes, comments, follows and mentions |
 | **Settings** | Themes, the image protocol, the toggles and the key map |
+
+### Search every message
+
+`Ctrl+S` opens Instagram's own message search — it reaches messages in
+conversations that are long gone from your inbox. The results are grouped and
+clicking one opens the conversation it belongs to.
+
+### Presence, receipts and the action menu
+
+- **Active now** — a green dot next to the people who are online at the
+  moment.
+- **Seen** — opening a conversation tells Instagram the newest message has
+  been read, and your own messages are marked.
+- **Right click** a conversation or a message for the actions that apply to
+  it: reply, react, like, copy, unsend, mute, mark as unread, rename the
+  group.
 
 ### Themes
 
