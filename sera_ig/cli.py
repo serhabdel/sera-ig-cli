@@ -21,7 +21,7 @@ from .commands import user as user_cmds
 from .config import get_config
 from .errors import SeraError
 from .output import console, fail, ok
-from .state import set_state
+from .state import resolve_output, set_state
 
 logger = logging.getLogger("sera_ig")
 
@@ -314,6 +314,87 @@ def shell_command(
     if account:
         set_state(account=account.lstrip("@").strip())
     _open_shell()
+
+
+# --------------------------------------------------------------------- theme
+theme_app = typer.Typer(no_args_is_help=True, help="List, set and inspect themes.")
+
+
+@theme_app.command("list")
+def theme_list(
+    output: str = typer.Option(None, "-o", "--output", help="Output format: text or json"),
+) -> None:
+    """List every available theme."""
+    from .app.themes import builtin_themes, user_themes
+    from .output import dump_json, print_rows
+
+    fmt = resolve_output(output)
+    current = get_config().get("ui.theme")
+    builtins = sorted(builtin_themes())
+    users = sorted(user_themes())
+    records = [
+        {"name": name, "source": "builtin", "active": name == current}
+        for name in builtins
+    ] + [
+        {"name": name, "source": "user", "active": name == current}
+        for name in users
+    ]
+    if fmt == "json":
+        dump_json(records)
+        return
+    print_rows(records, ["name", "source", "active"])
+
+
+@theme_app.command("set")
+def theme_set(
+    name: str = typer.Argument(..., help="Theme to use"),
+    output: str = typer.Option(None, "-o", "--output", help="Output format: text or json"),
+) -> None:
+    """Set the theme used by the application."""
+    from .app.themes import resolve_theme
+    from .output import dump_json
+
+    fmt = resolve_output(output)
+    if resolve_theme(name) is None:
+        raise typer.BadParameter(
+            f"No theme called '{name}'. Run `seraig theme list` to see the available ones."
+        )
+    get_config().set("ui.theme", name)
+    payload = {"theme": name, "active": True}
+    if fmt == "json":
+        dump_json(payload)
+        return
+    ok(f"Theme set to '{name}'")
+
+
+@theme_app.command("show")
+def theme_show(
+    name: str = typer.Argument(None, help="Theme to describe (defaults to the current one)"),
+    output: str = typer.Option(None, "-o", "--output", help="Output format: text or json"),
+) -> None:
+    """Show the colours of a theme."""
+    from .app.themes import theme_summary
+    from .output import dump_json, print_table
+
+    fmt = resolve_output(output)
+    target = name or get_config().get("ui.theme")
+    summary = theme_summary(target)
+    if summary is None:
+        raise typer.BadParameter(f"No theme called '{target}'.")
+    if fmt == "json":
+        dump_json(summary)
+        return
+    rows = [(key, value) for key, value in summary.items() if key != "variables"]
+    print_table(rows, ["setting", "value"])
+    if summary["variables"]:
+        console.print("[bold]variables[/bold]")
+        print_table(
+            [(key, value) for key, value in summary["variables"].items()],
+            ["name", "value"],
+        )
+
+
+app.add_typer(theme_app, name="theme", help="List, set and inspect themes.")
 
 
 # --------------------------------------------------------------------- doctor

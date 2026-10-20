@@ -40,7 +40,17 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "ui": {
         "banner": True,
         "color": True,
+        "theme": "textual-dark",
+        "density": "comfortable",
+        "show_avatars": True,
+        "show_timestamps": True,
+        "show_previews": True,
+        "avatar_images": False,
+        "image_protocol": "auto",
+        "animations": True,
+        "confirm_send": False,
     },
+    "keybinds": {},
     "advanced": {
         "data_dir": None,  # filled in below
         "request_delay": 1,
